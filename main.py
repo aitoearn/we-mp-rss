@@ -5,17 +5,20 @@ import asyncio
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-from core.config import cfg
-if cfg.get("redis.server.enabled", False):
-        from tools.redis_server import run_redis_server
-        run_redis_server(config_path="config.yaml")
 import uvicorn
 from core.print import print_warning, print_info, print_success
 import threading
-from driver.auth import start_auth_service   
+from driver.auth import start_auth_service
 import os
 
-if __name__ == '__main__':
+
+def run():
+    from core.config import cfg
+
+    if cfg.get("redis.server.enabled", False):
+        from tools.redis_server import run_redis_server
+        run_redis_server(config_path=cfg.config_path)
+
     print("环境变量:")
     for k,v in os.environ.items():
         print(f"{k}={v}")
@@ -121,4 +124,7 @@ if __name__ == '__main__':
                 reload_excludes=['static','data','node_modules','*.pnpm*'],
                 workers=thread,
                 )
-    pass
+
+
+if __name__ == '__main__':
+    run()

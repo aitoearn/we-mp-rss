@@ -2,12 +2,12 @@
 from core.config import cfg
 import os
 import uuid
-import os
 import requests
 from urllib.parse import urlparse
-files_dir="data/files"
-avatar_dir=f"{files_dir}/avatars"
-os.makedirs(avatar_dir, exist_ok=True)
+from core.paths import get_files_dir, get_avatars_dir
+
+files_dir = get_files_dir()
+avatar_dir = get_avatars_dir()
 def save_avatar_locally(avatar_url):
     if not cfg.get("local_avatar",False):
         return avatar_url

@@ -1,73 +1,104 @@
 # WeRSS 桌面应用
 
-参考 [AutoGLM-GUI](https://github.com/suyiiyii/AutoGLM-GUI) 的 **Electron + Python FastAPI** 架构：Electron 负责窗口与进程生命周期，Python 后端提供 API 与前端静态资源。
+参考 [AutoGLM-GUI](https://github.com/suyiiyii/AutoGLM-GUI) 的 **Electron + Python FastAPI** 架构。
 
 ## 架构
 
 ```
-Electron 主进程 (electron/main.js)
-  ├─ 启动 Python 后端 (main.py)
-  ├─ 等待端口就绪
-  └─ BrowserWindow 加载 http://127.0.0.1:{port}
-
-Python 后端 (main.py + web.py)
-  ├─ FastAPI API (/api/v1/wx/*)
-  ├─ RSS (/rss, /feed)
-  └─ 前端 SPA (static/)
+Electron 主进程
+  ├─ 开发模式: python main.py
+  └─ 生产模式: resources/backend/werss-gui/werss-gui
+       ↓
+BrowserWindow → http://127.0.0.1:{port}
+       ↓
+FastAPI (web.py) + static/ 前端
 ```
 
 ## 环境要求
 
-- **Python** >= 3.13.1（推荐项目根目录 `.venv`）
-- **Node.js** >= 20
-- 已安装后端依赖：`pip install -r requirements.txt`
-- 首次运行会从 `config.example.yaml` 复制配置到用户数据目录
+- Python >= 3.13.1
+- Node.js >= 20
+- PyInstaller（打包时需要）
 
-## 开发模式（当前可用）
+## 开发模式
 
 ```bash
-# 1. 准备 Python 环境（若尚未完成）
+# 准备 Python 环境
 python3.13 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# 2. 启动桌面应用
+# 启动桌面应用
 cd electron
 npm install
 npm run dev
 ```
 
-应用会自动：
-
-1. 在系统用户目录创建数据文件夹（macOS: `~/Library/Application Support/WeRSS/we-mp-rss/`）
-2. 启动 `python main.py -job True -init True/False`
-3. 打开桌面窗口并加载 WeRSS 管理界面
-
-默认登录：`admin` / `admin@123`
-
-## 自定义 Python 路径
-
-若未使用 `.venv`，可指定解释器：
+## 一键打包（第二阶段）
 
 ```bash
-export WERSS_PYTHON=/path/to/python3.13
-cd electron && npm run dev
+source .venv/bin/activate
+pip install pyinstaller
+
+# 完整构建：前端 + PyInstaller 后端 + Electron 安装包
+python scripts/build_electron.py
+
+# 仅重新打包后端与 Electron（跳过前端）
+python scripts/build_electron.py --skip-frontend
 ```
 
-## 与浏览器模式的区别
+构建产物：
 
-| 项目 | 浏览器模式 | 桌面模式 |
-|------|-----------|---------|
-| 启动方式 | `python main.py -job True -init True` | `cd electron && npm run dev` |
-| 数据目录 | 项目内 `./data/` | 系统用户数据目录 |
-| 配置文件 | 项目内 `config.yaml` | 用户数据目录内 `config.yaml` |
-| 端口 | 默认 8001 | 自动从 8001 起查找可用端口 |
+| 步骤 | 输出 |
+|------|------|
+| 前端 | `static/` |
+| PyInstaller | `resources/backend/werss-gui/` |
+| Electron | `electron/dist/` |
 
-## 第二阶段：安装包打包（计划中）
+### 分步构建
 
-将补充：
+```bash
+# 1. 构建前端
+python scripts/build.py
 
-- `scripts/build_electron.py`：PyInstaller + electron-builder 一键构建
-- macOS `.dmg` / Windows `.exe` / Linux `.AppImage`
+# 2. 打包 Python 后端
+cd scripts && pyinstaller werss.spec
 
-当前 `electron/electron-builder.yml` 与 `scripts/build_electron.py` 为占位文件。
+# 3. 复制后端到 resources
+mkdir -p ../resources/backend
+cp -R dist/werss-gui ../resources/backend/
+
+# 4. 构建 Electron
+cd ../electron
+npm install
+npm run build:mac    # 或 build:win / build:linux
+```
+
+## 数据目录
+
+桌面版数据存储在系统用户目录：
+
+- macOS: `~/Library/Application Support/WeRSS/we-mp-rss/`
+- Windows: `%APPDATA%/WeRSS/we-mp-rss/`
+- Linux: `~/.config/WeRSS/we-mp-rss/`
+
+包含：
+
+- `config.yaml` — 应用配置
+- `data/db.db` — SQLite 数据库
+- `data/playwright-browsers/` — Playwright 浏览器（首次采集时下载）
+
+## Playwright 说明
+
+打包后的应用首次进行公众号采集时，可能需要联网下载 Playwright 浏览器到用户数据目录。如需预装，可在构建机器上执行：
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH=./resources/playwright-browsers playwright install webkit
+```
+
+并将 `resources/playwright-browsers` 加入 `electron-builder.yml` 的 `extraResources`。
+
+## 默认登录
+
+- 用户名: `admin`
+- 密码: `admin@123`

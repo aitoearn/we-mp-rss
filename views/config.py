@@ -1,7 +1,10 @@
 import os
 from core.config import cfg
+from core.paths import get_public_dir
+
+
 class Config:
-    base_path= "./public"
+    base_path = get_public_dir()
     #模板路径 
     public_dir = f"{base_path}/templates/"
     home_template = f"{base_path}/templates/home.html"

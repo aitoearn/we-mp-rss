@@ -22,9 +22,20 @@ let appIsQuitting = false;
  */
 function getProjectRoot() {
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'app');
+    return app.getPath('userData');
   }
   return path.join(__dirname, '..');
+}
+
+/**
+ * 获取配置模板路径
+ * @returns {string}
+ */
+function getExampleConfigPath() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'config.example.yaml');
+  }
+  return path.join(__dirname, '..', 'config.example.yaml');
 }
 
 /**
@@ -109,21 +120,25 @@ async function waitForBackend(port, timeout = 120000) {
 
 /**
  * 初始化桌面运行环境：用户数据目录、配置文件、数据库目录
- * @returns {{ userDataRoot: string, configPath: string, dbPath: string, needInit: boolean }}
+ * @returns {{ userDataRoot: string, configPath: string, dataDir: string, dbPath: string, needInit: boolean }}
  */
 function ensureDesktopEnvironment() {
-  const projectRoot = getProjectRoot();
   const userDataRoot = getUserDataRoot();
   const dataDir = path.join(userDataRoot, 'data');
   const configPath = path.join(userDataRoot, 'config.yaml');
   const dbPath = path.join(dataDir, 'db.db');
-  const exampleConfigPath = path.join(projectRoot, 'config.example.yaml');
+  const exampleConfigPath = getExampleConfigPath();
 
   fs.mkdirSync(dataDir, { recursive: true });
 
   if (!fs.existsSync(configPath)) {
     if (fs.existsSync(exampleConfigPath)) {
       fs.copyFileSync(exampleConfigPath, configPath);
+      // 桌面版默认关闭内嵌 Redis，避免 6379 端口冲突
+      fs.appendFileSync(
+        configPath,
+        '\n# 桌面版默认配置\nredis:\n  server:\n    enabled: false\n'
+      );
       console.log(`已创建默认配置: ${configPath}`);
     } else {
       throw new Error(`找不到配置模板: ${exampleConfigPath}`);
@@ -133,6 +148,7 @@ function ensureDesktopEnvironment() {
   return {
     userDataRoot,
     configPath,
+    dataDir,
     dbPath,
     needInit: !fs.existsSync(dbPath)
   };
@@ -170,42 +186,69 @@ function resolvePythonExecutable(projectRoot) {
  * @returns {Promise<void>}
  */
 async function startBackend() {
-  const projectRoot = getProjectRoot();
-  const { userDataRoot, configPath, dbPath, needInit } = ensureDesktopEnvironment();
-  const pythonExe = resolvePythonExecutable(projectRoot);
-  const mainScript = path.join(projectRoot, 'main.py');
-
-  if (!fs.existsSync(mainScript)) {
-    throw new Error(`找不到后端入口: ${mainScript}`);
-  }
+  const isDev = process.argv.includes('--dev') || !app.isPackaged;
+  const projectRoot = path.join(__dirname, '..');
+  const { userDataRoot, configPath, dataDir, dbPath, needInit } = ensureDesktopEnvironment();
 
   backendPort = await findAvailablePort(DEFAULT_PORT);
 
   const dbUrl = `sqlite:///${dbPath.replace(/\\/g, '/')}`;
-  const args = [
-    mainScript,
-    '-config', configPath,
-    '-job', 'True',
-    '-init', needInit ? 'True' : 'False'
-  ];
-
-  const env = {
+  const baseEnv = {
     ...process.env,
     PORT: String(backendPort),
     DB: dbUrl,
+    WERSS_DATA_DIR: dataDir,
+    PLAYWRIGHT_BROWSERS_PATH: path.join(dataDir, 'playwright-browsers'),
     PYTHONUTF8: '1',
     PYTHONIOENCODING: 'utf-8',
     WERSS_DESKTOP: '1'
   };
 
-  console.log(`启动后端: ${pythonExe} ${args.join(' ')}`);
-  console.log(`工作目录: ${projectRoot}`);
+  let backendExe;
+  let args;
+  let cwd;
+
+  if (isDev) {
+    backendExe = resolvePythonExecutable(projectRoot);
+    const mainScript = path.join(projectRoot, 'main.py');
+    if (!fs.existsSync(mainScript)) {
+      throw new Error(`找不到后端入口: ${mainScript}`);
+    }
+    args = [
+      mainScript,
+      '-config', configPath,
+      '-job', 'True',
+      '-init', needInit ? 'True' : 'False'
+    ];
+    cwd = projectRoot;
+  } else {
+    const backendDir = path.join(process.resourcesPath, 'backend', 'werss-gui');
+    backendExe = path.join(
+      backendDir,
+      process.platform === 'win32' ? 'werss-gui.exe' : 'werss-gui'
+    );
+    if (!fs.existsSync(backendExe)) {
+      throw new Error(`找不到打包后端: ${backendExe}`);
+    }
+    args = [
+      '--port', String(backendPort),
+      '--config', configPath,
+      '--data-dir', dataDir,
+      '--job', 'True',
+      '--init', needInit ? 'True' : 'False'
+    ];
+    cwd = userDataRoot;
+  }
+
+  console.log(`启动模式: ${isDev ? '开发' : '生产'}`);
+  console.log(`启动后端: ${backendExe} ${args.join(' ')}`);
+  console.log(`工作目录: ${cwd}`);
   console.log(`用户数据: ${userDataRoot}`);
   console.log(`监听端口: ${backendPort}`);
 
-  backendProcess = spawn(pythonExe, args, {
-    env,
-    cwd: projectRoot,
+  backendProcess = spawn(backendExe, args, {
+    env: baseEnv,
+    cwd,
     stdio: ['ignore', 'pipe', 'pipe']
   });
 

@@ -2,8 +2,6 @@ appId: com.aitoearn.werss
 productName: WeRSS
 copyright: Copyright © 2026
 
-# 第二阶段打包配置占位，当前请使用 electron 目录下的 npm run dev
-
 directories:
   output: dist
   buildResources: build
@@ -11,21 +9,40 @@ directories:
 files:
   - main.js
   - preload.js
+  - afterPack.js
   - package.json
 
+afterPack: ./afterPack.js
+
 extraResources:
-  - from: ../resources/backend
-    to: backend
+  - from: ../resources/backend/werss-gui
+    to: backend/werss-gui
+  - from: ../config.example.yaml
+    to: config.example.yaml
 
 mac:
   target:
     - dmg
   category: public.app-category.productivity
+  identity: null
+
+dmg:
+  writeUpdateInfo: false
+  format: UDZO
+  sign: false
 
 win:
   target:
     - nsis
 
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
 linux:
   target:
     - AppImage
+  category: Network
+  maintainer: aitoearn

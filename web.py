@@ -36,6 +36,7 @@ from views import router as views_router
 import apis
 import os
 from core.config import cfg,VERSION,API_BASE
+from core.paths import get_static_dir
 from starlette.middleware.base import BaseHTTPMiddleware
 
 class AKMiddleware(BaseHTTPMiddleware):
@@ -120,8 +121,9 @@ app.include_router(feeds_router)
 app.include_router(views_router)
 
 # 静态文件服务配置
-app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+_static_dir = get_static_dir()
+app.mount("/assets", StaticFiles(directory=os.path.join(_static_dir, "assets")), name="assets")
+app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 from core.res.avatar import files_dir
 app.mount("/files", StaticFiles(directory=files_dir), name="files")
 # app.mount("/docs", StaticFiles(directory="./data/docs"), name="docs")
@@ -133,7 +135,7 @@ async def serve_vue_app(request: Request, path: str):
         return None
     
     # 返回Vue入口文件
-    index_path = os.path.join("static", "index.html")
+    index_path = os.path.join(_static_dir, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
     

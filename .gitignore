@@ -26,6 +26,9 @@ test.yaml
 .venv
 electron/node_modules/
 electron/dist/
+resources/
+scripts/dist/
+scripts/build/
 .idea
 .travis
 test.py
