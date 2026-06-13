@@ -1,0 +1,31 @@
+appId: com.aitoearn.werss
+productName: WeRSS
+copyright: Copyright © 2026
+
+# 第二阶段打包配置占位，当前请使用 electron 目录下的 npm run dev
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - main.js
+  - preload.js
+  - package.json
+
+extraResources:
+  - from: ../resources/backend
+    to: backend
+
+mac:
+  target:
+    - dmg
+  category: public.app-category.productivity
+
+win:
+  target:
+    - nsis
+
+linux:
+  target:
+    - AppImage

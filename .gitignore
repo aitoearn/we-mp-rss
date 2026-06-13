@@ -24,6 +24,8 @@ doc2pdf/*.pdf
 demo.txt
 test.yaml
 .venv
+electron/node_modules/
+electron/dist/
 .idea
 .travis
 test.py

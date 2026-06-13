@@ -1,0 +1,27 @@
+{
+  "name": "we-mp-rss-desktop",
+  "version": "1.5.2",
+  "description": "WeRSS 微信公众号订阅助手 - 桌面版",
+  "main": "main.js",
+  "homepage": "https://github.com/aitoearn/we-mp-rss",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aitoearn/we-mp-rss.git"
+  },
+  "scripts": {
+    "start": "electron . --dev",
+    "dev": "electron . --dev",
+    "build": "echo '打包功能将在后续版本提供，请先使用 npm run dev' && exit 1"
+  },
+  "keywords": [
+    "werss",
+    "wechat",
+    "rss",
+    "electron"
+  ],
+  "author": "aitoearn",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^39.8.10"
+  }
+}
