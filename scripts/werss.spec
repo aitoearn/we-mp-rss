@@ -12,11 +12,16 @@ PyInstaller 配置 - WeRSS 桌面版后端打包
 
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_submodules
+
 ROOT_DIR = Path(SPECPATH).parent
 
 block_cipher = None
 
 hiddenimports = [
+    'web',
+    'main',
+    'init_sys',
     'uvicorn.logging',
     'uvicorn.loops',
     'uvicorn.loops.auto',
@@ -47,7 +52,12 @@ hiddenimports = [
     'multipart',
     'email.mime.multipart',
     'email.mime.text',
-]
+] + collect_submodules('apis') \
+  + collect_submodules('core') \
+  + collect_submodules('views') \
+  + collect_submodules('jobs') \
+  + collect_submodules('driver') \
+  + collect_submodules('schemas')
 
 a = Analysis(
     [str(ROOT_DIR / 'desktop' / '__main__.py')],

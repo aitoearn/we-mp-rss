@@ -12,6 +12,15 @@ from driver.auth import start_auth_service
 import os
 
 
+def resolve_uvicorn_app(auto_reload: bool):
+    """解析 uvicorn 应用目标。PyInstaller 打包后无法通过字符串动态导入 web 模块。"""
+    if auto_reload and not getattr(sys, "frozen", False):
+        return "web:app"
+    from web import app
+
+    return app
+
+
 def run():
     from core.config import cfg
 
@@ -96,11 +105,13 @@ def run():
         print_warning("Windows 平台上禁用 reload 模式以确保 Playwright 正常工作")
         AutoReload = False
     
+    app_target = resolve_uvicorn_app(AutoReload)
+
     # Windows 上使用自定义配置确保 ProactorEventLoop
     if sys.platform == 'win32':
         # 使用 uvicorn 的 Config 和 Server 类来控制事件循环
         config = uvicorn.Config(
-            "web:app",
+            app_target,
             host="0.0.0.0",
             port=int(cfg.get("port", 8001)),
             reload=False,
@@ -118,12 +129,15 @@ def run():
         
         asyncio.run(server.serve())
     else:
-        uvicorn.run("web:app", host="0.0.0.0", port=int(cfg.get("port",8001)),
-                reload=AutoReload,
-                reload_dirs=reload_dirs,
-                reload_excludes=['static','data','node_modules','*.pnpm*'],
-                workers=thread,
-                )
+        uvicorn.run(
+            app_target,
+            host="0.0.0.0",
+            port=int(cfg.get("port", 8001)),
+            reload=AutoReload and not getattr(sys, "frozen", False),
+            reload_dirs=reload_dirs,
+            reload_excludes=['static', 'data', 'node_modules', '*.pnpm*'],
+            workers=thread,
+        )
 
 
 if __name__ == '__main__':

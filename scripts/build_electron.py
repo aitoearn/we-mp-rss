@@ -145,9 +145,17 @@ class ElectronBuilder:
         ):
             return False
 
-        backend_resources = self.resources_dir / "backend"
+        backend_resources = self.resources_dir / "backend" / "werss-gui"
         if backend_resources.exists():
             shutil.rmtree(backend_resources)
+        if self.resources_dir.joinpath("backend").exists():
+            # 兼容旧版扁平目录结构
+            for child in self.resources_dir.joinpath("backend").iterdir():
+                if child.name != "werss-gui":
+                    if child.is_dir():
+                        shutil.rmtree(child)
+                    else:
+                        child.unlink()
         shutil.copytree(dist_dir, backend_resources)
         print_success(f"后端已复制到 {backend_resources}")
         return True
