@@ -1,1 +1,0 @@
-import{v as e}from"./http-k_bGLbzv.js";export{e as getArticles};

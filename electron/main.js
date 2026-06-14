@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell, Menu } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, Menu, session } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const net = require('net');
@@ -122,6 +122,48 @@ async function waitForBackend(port, timeout = 120000) {
  * 初始化桌面运行环境：用户数据目录、配置文件、数据库目录
  * @returns {{ userDataRoot: string, configPath: string, dataDir: string, dbPath: string, needInit: boolean }}
  */
+/**
+ * 桌面端登录状态文件路径（跨端口持久化 token）
+ * @returns {string}
+ */
+function getAuthFilePath() {
+  return path.join(getUserDataRoot(), 'auth.json');
+}
+
+/**
+ * @returns {{ token: string, expire?: number } | null}
+ */
+function readAuthState() {
+  const authFile = getAuthFilePath();
+  if (!fs.existsSync(authFile)) {
+    return null;
+  }
+  try {
+    const raw = JSON.parse(fs.readFileSync(authFile, 'utf-8'));
+    if (raw && typeof raw.token === 'string' && raw.token) {
+      return raw;
+    }
+  } catch (error) {
+    console.warn('读取登录状态失败:', error);
+  }
+  return null;
+}
+
+/**
+ * @param {{ token: string, expire?: number }} state
+ */
+function writeAuthState(state) {
+  fs.mkdirSync(getUserDataRoot(), { recursive: true });
+  fs.writeFileSync(getAuthFilePath(), JSON.stringify(state, null, 2), 'utf-8');
+}
+
+function clearAuthState() {
+  const authFile = getAuthFilePath();
+  if (fs.existsSync(authFile)) {
+    fs.unlinkSync(authFile);
+  }
+}
+
 function ensureDesktopEnvironment() {
   const userDataRoot = getUserDataRoot();
   const dataDir = path.join(userDataRoot, 'data');
@@ -361,7 +403,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      session: session.fromPartition('persist:werss')
     },
     show: false
   });
@@ -382,6 +425,81 @@ function createWindow() {
     return { action: 'deny' };
   });
 }
+
+function getExportPrefsPath() {
+  return path.join(getUserDataRoot(), 'export_prefs.json');
+}
+
+function readExportPrefs() {
+  const prefsFile = getExportPrefsPath();
+  if (!fs.existsSync(prefsFile)) {
+    return {};
+  }
+  try {
+    return JSON.parse(fs.readFileSync(prefsFile, 'utf-8'));
+  } catch (error) {
+    console.warn('读取导出偏好失败:', error);
+    return {};
+  }
+}
+
+function writeExportPrefs(prefs) {
+  fs.mkdirSync(getUserDataRoot(), { recursive: true });
+  fs.writeFileSync(getExportPrefsPath(), JSON.stringify(prefs, null, 2), 'utf-8');
+}
+
+ipcMain.handle('dialog-select-export-dir', async (_event, currentDir) => {
+  const prefs = readExportPrefs();
+  const result = await dialog.showOpenDialog({
+    title: '选择导出保存文件夹',
+    defaultPath: currentDir || prefs.lastExportDir || getUserDataRoot(),
+    properties: ['openDirectory', 'createDirectory']
+  });
+  if (result.canceled || !result.filePaths.length) {
+    return { canceled: true, path: null };
+  }
+  const selected = result.filePaths[0];
+  writeExportPrefs({ ...prefs, lastExportDir: selected });
+  return { canceled: false, path: selected };
+});
+
+ipcMain.handle('export-get-default-dir', () => {
+  const prefs = readExportPrefs();
+  if (prefs.lastExportDir && fs.existsSync(prefs.lastExportDir)) {
+    return prefs.lastExportDir;
+  }
+  return path.join(getUserDataRoot(), 'data', 'docs', '_all');
+});
+
+ipcMain.handle('export-open-dir', async (_event, dirPath) => {
+  if (!dirPath || typeof dirPath !== 'string') {
+    return false;
+  }
+  const resolved = path.resolve(dirPath);
+  if (!fs.existsSync(resolved)) {
+    return false;
+  }
+  await shell.openPath(resolved);
+  return true;
+});
+
+ipcMain.handle('auth-get-state', () => readAuthState());
+
+ipcMain.handle('auth-set-state', (_event, state) => {
+  if (!state || typeof state.token !== 'string' || !state.token) {
+    throw new Error('无效的登录状态');
+  }
+  writeAuthState({
+    token: state.token,
+    expire: typeof state.expire === 'number' ? state.expire : undefined
+  });
+  return true;
+});
+
+ipcMain.handle('auth-clear-state', () => {
+  clearAuthState();
+  return true;
+});
 
 ipcMain.handle('app-relaunch', async () => {
   app.relaunch();

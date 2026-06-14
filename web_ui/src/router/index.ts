@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { clearAuthToken, getToken } from '@/utils/auth'
 import BasicLayout from '../components/Layout/BasicLayout.vue'
 import ExportRecords from '../views/ExportRecords.vue'
 import Login from '../views/Login.vue'
@@ -266,13 +267,25 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, from, next) => {
+  const token = getToken()
+
+  if (to.path === '/login' && token) {
+    try {
+      const { verifyToken } = await import('@/api/auth')
+      await verifyToken()
+      const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : '/'
+      return next(redirect)
+    } catch (error) {
+      console.error('登录页 Token 验证失败:', error)
+      await clearAuthToken()
+    }
+  }
+
   // 不需要认证的路由直接放行
   if (!to.meta.requiresAuth) {
     return next()
   }
 
-  const token = localStorage.getItem('token')
-  
   // 未登录则跳转登录页
   if (!token) {
     return next({
@@ -290,10 +303,10 @@ router.beforeEach(async (to, from, next) => {
   } catch (error) {
     console.error('Token验证失败:', error)
     // token无效时清除并跳转登录
-    localStorage.removeItem('token')
+    await clearAuthToken()
     next({
       path: '/login',
-      query: { 
+      query: {
         redirect: to.fullPath,
         error: 'session_expired'
       }

@@ -274,6 +274,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { getCurrentUser } from '@/api/auth'
 import { logout } from '@/api/auth'
+import { clearAuthToken } from '@/utils/auth'
 import WechatAuthQrcode from '@/components/WechatAuthQrcode.vue'
 
 const qrcodeRef = ref()
@@ -353,7 +354,7 @@ const goToChangePassword = () => {
 const handleLogout = async () => {
   try {
     await logout()
-    localStorage.removeItem('token')
+    await clearAuthToken()
     router.push('/login')
   } catch (error) {
     Message.error('退出登录失败')
@@ -361,13 +362,12 @@ const handleLogout = async () => {
 }
 
 onMounted(() => {
- 
   if (isAuthenticated.value) {
     fetchUserInfo()
+    fetchSysInfo()
   }
   initBrowserNotification()
   translatePage();
-  fetchSysInfo();
 })
 import { translatePage, setCurrentLanguage } from '@/utils/translate';
 
@@ -377,6 +377,7 @@ watch(
     hasLogined.value = !!localStorage.getItem('token')
     if (hasLogined.value) {
       fetchUserInfo()
+      fetchSysInfo()
     }
   }
 )

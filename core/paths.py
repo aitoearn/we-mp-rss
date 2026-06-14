@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 
 def is_frozen() -> bool:
@@ -54,3 +55,57 @@ def get_avatars_dir() -> str:
     avatar_dir = Path(get_files_dir()) / "avatars"
     avatar_dir.mkdir(parents=True, exist_ok=True)
     return str(avatar_dir)
+
+
+def get_wx_qrcode_path() -> Path:
+    """微信登录二维码本地文件路径（可写，位于 files 目录供 /files 静态服务访问）。"""
+    path = Path(get_files_dir()) / "wx_qrcode.png"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_wx_qrcode_web_path() -> str:
+    """微信登录二维码的 HTTP 访问路径（相对站点根路径）。"""
+    return "files/wx_qrcode.png"
+
+
+def get_wx_login_lock_path() -> Path:
+    """微信扫码登录锁文件路径。"""
+    return get_data_dir() / "wx_login.lock"
+
+
+def normalize_export_mp_id(mp_id: Optional[str] = None) -> str:
+    """导出目录使用的公众号 ID，空值表示导出全部文章。"""
+    if mp_id is None:
+        return ""
+    value = str(mp_id).strip()
+    return value
+
+
+def get_export_docs_dir() -> Path:
+    """文章导出根目录（可写）。"""
+    path = get_data_dir() / "docs"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_export_mp_dir(mp_id: Optional[str] = None) -> Path:
+    """指定公众号（或全部）的导出目录。"""
+    folder = normalize_export_mp_id(mp_id) or "_all"
+    path = get_export_docs_dir() / folder
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def resolve_export_target_dir(mp_id: Optional[str] = None, export_dir: Optional[str] = None) -> Path:
+    """解析导出目标目录，优先使用用户指定的绝对路径。"""
+    if export_dir and str(export_dir).strip():
+        path = Path(str(export_dir).strip()).expanduser()
+        if not path.is_absolute():
+            raise ValueError("导出目录必须是绝对路径")
+        path = path.resolve()
+        path.mkdir(parents=True, exist_ok=True)
+        if not os.access(path, os.W_OK):
+            raise ValueError(f"导出目录不可写: {path}")
+        return path
+    return get_export_mp_dir(mp_id)

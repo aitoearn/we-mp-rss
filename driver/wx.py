@@ -18,6 +18,8 @@ from .cookies import expire
 import json
 import psutil
 from core.print import print_error,print_warning,print_info,print_success
+from core.paths import get_wx_qrcode_path, get_wx_qrcode_web_path, get_data_dir
+
 class Wx:
     _haslogin=False
     SESSION=None
@@ -25,7 +27,6 @@ class Wx:
     isLOCK=False
     WX_LOGIN="https://mp.weixin.qq.com/"
     WX_HOME="https://mp.weixin.qq.com/cgi-bin/home"
-    wx_login_url="static/wx_qrcode.png"
     lock_file_path="data/lock.lock"
     CallBack=None
     Notice=None
@@ -33,6 +34,9 @@ class Wx:
     # 添加线程锁保护共享变量
     _login_lock = Lock()
     def __init__(self):
+        self.qr_code_path = str(get_wx_qrcode_path())
+        self.wx_login_url = get_wx_qrcode_web_path()
+        self.lock_file_path = str(get_data_dir() / "lock.lock")
         self.lock_path=os.path.dirname(self.lock_file_path)
         self.refresh_interval=3660*24
         self.controller=PlaywrightController()
@@ -43,7 +47,7 @@ class Wx:
         pass
 
     def GetHasCode(self):
-        if os.path.exists(self.wx_login_url):
+        if os.path.exists(self.qr_code_path):
             return True
         return False
     async def extract_token_from_requests(self):
@@ -273,7 +277,7 @@ class Wx:
         if  self.check_lock():
             print_warning("微信公众平台登录脚本正在运行，请勿重复运行")
             return {
-                "code":f"{self.wx_login_url}?t={(time.time())}",
+                "code":f"/{self.wx_login_url}?t={(time.time())}",
                 "msg":"微信公众平台登录脚本正在运行，请勿重复运行！"}
 
         self.Clean()
@@ -429,9 +433,9 @@ class Wx:
                     pass
     def isLock(self):             
         if self.isLock:
-            if os.path.exists(self.wx_login_url):
+            if os.path.exists(self.qr_code_path):
                 try:
-                    size=os.path.getsize(self.wx_login_url)
+                    size=os.path.getsize(self.qr_code_path)
                     return size>364
                 except Exception as e:
                     print(f"二维码图片获取失败: {str(e)}")
@@ -486,11 +490,11 @@ class Wx:
             print(f"code_src:{code_src}")
 
             # 使用Playwright截图功能（添加异常处理）
-            await qrcode.screenshot(path=self.wx_login_url)
+            await qrcode.screenshot(path=self.qr_code_path)
 
             print("二维码已保存为 wx_qrcode.png，请扫码登录...")
             self.HasCode = True
-            if os.path.getsize(self.wx_login_url) <= 364:
+            if os.path.getsize(self.qr_code_path) <= 364:
                 raise Exception("二维码图片获取失败，请重新扫码")
             # 等待登录成功（检测二维码图片加载完成）
             print("等待扫码登录...")
@@ -538,7 +542,7 @@ class Wx:
                 'cookies': cookies,
                 'cookies_str': cookies_str,
                 'token': token,
-                'wx_login_url': self.wx_login_url,
+                'wx_login_url': self.qr_code_path,
                 'expiry': cookie_expiry
             }
     async def Call_Success(self, has_extdata=True):
@@ -674,7 +678,7 @@ class Wx:
         return rel
     def Clean(self):
         try:
-            os.remove(self.wx_login_url)
+            os.remove(self.qr_code_path)
         except:
             pass
         finally:
@@ -694,7 +698,7 @@ class Wx:
             return False
             
     def check_lock(self, timeout: int = 300) -> bool:
-        if not os.path.exists(self.wx_login_url):
+        if not os.path.exists(self.qr_code_path):
             return False
         return True
     def set_lock(self):

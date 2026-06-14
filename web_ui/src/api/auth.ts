@@ -9,6 +9,7 @@ export interface LoginParams {
 export interface LoginResult {
   access_token: string
   token_type: string
+  expires_in?: number
 }
 
 export const login = (data: LoginParams) => {

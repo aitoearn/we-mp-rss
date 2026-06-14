@@ -23,6 +23,7 @@ from sqlalchemy import true
 
 from core.print import print_warning,print_success,print_error
 from .token import get as get_token,set_token
+from core.paths import get_wx_qrcode_path, get_wx_qrcode_web_path, get_wx_login_lock_path
 import psutil
 import logging
 # 配置日志
@@ -45,19 +46,9 @@ class WeChatAPI:
         self.token = None
         self.cookies_dict=[]
         self.cookies:Optional[Dict[str,str]] = {}
-        self.qr_code_path = "static/wx_qrcode.png"
-        self.wx_login_url=f"{self.qr_code_path}"
-        self.lock_file_path="data/lock.lock"
+        self._setup_runtime_paths()
         # 线程安全
         self._lock = Lock()
-        
-        # 回调函数
-        self.login_callback :Optional[Callable] = None
-        self.notice_callback = None
-        
-        # 确保静态目录存在
-        self.qr_code_path = os.path.abspath("static/wx_qrcode.png")
-        os.makedirs(os.path.dirname(self.qr_code_path), exist_ok=True)
         
         # 设置请求头
         self.session.headers.update({
@@ -69,6 +60,18 @@ class WeChatAPI:
             'Upgrade-Insecure-Requests': '1',
             'Referer': 'https://mp.weixin.qq.com/'
         })
+     
+    def _setup_runtime_paths(self) -> None:
+        """初始化二维码与锁文件路径，兼容桌面打包环境。"""
+        self.qr_code_path = str(get_wx_qrcode_path())
+        self.wx_login_url = get_wx_qrcode_web_path()
+        self.lock_file_path = str(get_wx_login_lock_path())
+        os.makedirs(os.path.dirname(self.qr_code_path), exist_ok=True)
+        os.makedirs(os.path.dirname(self.lock_file_path), exist_ok=True)
+
+        # 回调函数
+        self.login_callback: Optional[Callable] = None
+        self.notice_callback = None
      
     def get_qr_code(self, callback: Optional[Callable] = None, notice: Optional[Callable] = None) -> Dict[str, Any]:
         """
@@ -110,7 +113,7 @@ class WeChatAPI:
                     if  self.notice_callback is not None:
                         self.notice_callback()
                     return {
-                        'code': f"{self.qr_code_path}?t={int(time.time())}",
+                        'code': f"/{self.wx_login_url}?t={int(time.time())}",
                         'is_exists': os.path.exists(self.qr_code_path),
                         'uuid': qr_info['uuid'],
                         'msg': '请使用微信扫描二维码登录'
@@ -921,12 +924,23 @@ class WeChatAPI:
             "is_exists":self.GetHasCode(),
         }
     def GetHasCode(self):
-        if os.path.exists(self.wx_login_url):
-            return True
-        return False
+        return os.path.exists(self.qr_code_path)
+
     def check_lock(self, timeout: int = 300) -> bool:
-        if not os.path.exists(self.wx_login_url):
-                return False
+        if not os.path.exists(self.lock_file_path):
+            return False
+        try:
+            with open(self.lock_file_path, 'r') as f:
+                content = f.read().strip()
+            parts = content.split('|')
+            if len(parts) >= 2:
+                lock_time = float(parts[1])
+                if time.time() - lock_time > timeout:
+                    self._force_release_lock()
+                    return False
+        except Exception:
+            self._force_release_lock()
+            return False
         return True
     def set_lock(self):
         """创建锁定文件，写入当前进程PID和时间戳"""

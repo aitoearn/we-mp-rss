@@ -74,10 +74,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { login } from '@/api/auth'
+import {
+  clearAuthToken,
+  DESKTOP_DEFAULT_CREDENTIALS,
+  getToken,
+  isDesktopApp,
+  saveAuthToken
+} from '@/utils/auth'
 
 const appTitle = computed(() => import.meta.env.VITE_APP_TITLE || '微信公众号订阅助手')
 
@@ -88,41 +95,51 @@ const form = ref({
   password: ''
 })
 
+const redirectAfterLogin = async () => {
+  const redirect = router.currentRoute.value.query.redirect
+  await router.replace(redirect ? redirect.toString() : '/')
+}
+
+onMounted(async () => {
+  if (!isDesktopApp()) {
+    return
+  }
+
+  form.value.username = DESKTOP_DEFAULT_CREDENTIALS.username
+  form.value.password = DESKTOP_DEFAULT_CREDENTIALS.password
+
+  if (getToken()) {
+    try {
+      const { verifyToken } = await import('@/api/auth')
+      await verifyToken()
+      await redirectAfterLogin()
+      return
+    } catch {
+      await clearAuthToken()
+    }
+  }
+
+  await handleSubmit()
+})
+
 const handleSubmit = async () => {
   loading.value = true
   try {
-    // 使用URLSearchParams格式发送请求
-    const formData = new URLSearchParams()
-    formData.append('username', form.value.username)
-    formData.append('password', form.value.password)
-    
     const res = await login({
       username: form.value.username,
       password: form.value.password
     })
-    
-          if (res.access_token) {
-            // 存储token和过期时间
-            localStorage.setItem('token', res.access_token)
-            localStorage.setItem('token_expire', 
-              Date.now() + (res.expires_in * 1000))
-        
-            console.log('Token stored:', localStorage.getItem('token')) // 调试日志
-        
-            // 处理重定向
-            const redirect = router.currentRoute.value.query.redirect
-            await router.push(redirect ? redirect.toString() : '/')
-            Message.success('登录成功')
+
+    if (res.access_token) {
+      await saveAuthToken(res.access_token, res.expires_in)
+      await redirectAfterLogin()
+      Message.success('登录成功')
     } else {
       throw new Error('无效的响应格式')
     }
   } catch (error) {
     console.error('登录错误:', error)
-    const errorMsg = error.response?.data?.detail || 
-                    error.response?.data?.message || 
-                    error.message || 
-                    '登录失败，请检查用户名和密码'
-    // Message.error(errorMsg)
+    await clearAuthToken()
   } finally {
     loading.value = false
   }

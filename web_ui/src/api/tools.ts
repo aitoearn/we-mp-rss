@@ -2,7 +2,7 @@ import http from './http'
 
 export const exportArticles = (params:any) => {
     const requestData = {
-      mp_id: params.mp_id,
+      mp_id: params.mp_id || '',
       doc_id: params.scope === 'selected' ? params.ids : [],
       page_size: params.limit||10,
       page_count: params.page_count || 1,
@@ -14,7 +14,8 @@ export const exportArticles = (params:any) => {
       export_json: params.format.includes('json'),
       export_csv: params.format.includes('csv'),
       export_pdf: params.format.includes('pdf'),
-      zip_filename: params.zip_filename||''
+      zip_filename: params.zip_filename||'',
+      export_dir: params.use_custom_dir && params.export_dir ? params.export_dir : undefined,
     };
   return http.post<{code: number, data: string}>('/wx/tools/export/articles', requestData, {
     headers: {

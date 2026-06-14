@@ -22,6 +22,36 @@
       <a-form-item label="文件名" field="zip_filename">
         <a-input v-model="form.zip_filename" placeholder="请输入导出文件名（可选）" />
       </a-form-item>
+      <a-form-item label="保存位置" field="export_dir">
+        <a-space direction="vertical" fill style="width: 100%;">
+          <a-radio-group v-model="form.use_custom_dir">
+            <a-radio :value="false">默认目录（可在「导出记录」下载）</a-radio>
+            <a-radio :value="true">自选文件夹</a-radio>
+          </a-radio-group>
+          <template v-if="form.use_custom_dir">
+            <a-input
+              v-model="form.export_dir"
+              :readonly="isDesktop"
+              :placeholder="isDesktop ? '请选择保存文件夹' : '请输入服务器上的绝对路径'"
+            />
+            <a-space v-if="isDesktop">
+              <a-button type="outline" @click="handlePickDirectory">
+                选择文件夹
+              </a-button>
+              <a-button
+                v-if="form.export_dir"
+                type="text"
+                @click="handleOpenDirectory"
+              >
+                在 Finder 中打开
+              </a-button>
+            </a-space>
+          </template>
+          <a-typography-text v-else type="secondary">
+            {{ defaultExportDirHint }}
+          </a-typography-text>
+        </a-space>
+      </a-form-item>
       <a-form-item label="导出选项" field="options">
         <a-space direction="vertical">
           <a-checkbox v-model="form.add_title">添加标题</a-checkbox>
@@ -34,66 +64,124 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Message } from '@arco-design/web-vue';
-import { exportArticles } from '@/api/tools';
+import { computed, ref } from 'vue'
+import { Message } from '@arco-design/web-vue'
+import { exportArticles } from '@/api/tools'
+import { isDesktopApp } from '@/utils/auth'
+import {
+  getDefaultExportDirectory,
+  openExportDirectory,
+  pickExportDirectory
+} from '@/utils/exportDir'
 
-
-const visible = ref(false);
+const visible = ref(false)
+const isDesktop = computed(() => isDesktopApp())
+const defaultExportDir = ref('')
 const form = ref({
   scope: 'all',
-  format: ['pdf', 'docx', 'json', 'csv',"md"],
+  format: ['pdf', 'docx', 'json', 'csv', 'md'],
   page_count: 10,
   mp_id: '',
-  ids:[],
+  ids: [] as string[],
   add_title: true,
   remove_images: false,
   remove_links: false,
   zip_filename: '',
-});
+  use_custom_dir: false,
+  export_dir: ''
+})
 
-const emit = defineEmits(['confirm']);
-
-const show = (mp_id: string, ids:any, mp_name?: string) => {
-  visible.value = true;
-  form.value.mp_id = mp_id;
-  console.log(ids)
-  form.value.scope = ids && ids.length > 0 ? 'selected' : 'all';
-  form.value.ids=ids;
-  
-  // 如果提供了公众号名称，设置默认文件名
-  if (mp_name && mp_name !== '全部') {
-    form.value.zip_filename = `${mp_name}_文章.zip`;
-  } else {
-    form.value.zip_filename = '全部文章.zip';
+const defaultExportDirHint = computed(() => {
+  if (defaultExportDir.value) {
+    return `默认保存到：${defaultExportDir.value}`
   }
-  
-};
+  return '默认保存到应用数据目录下的 data/docs/'
+})
+
+const emit = defineEmits(['confirm'])
+
+const loadDefaultExportDir = async () => {
+  if (!isDesktopApp()) {
+    defaultExportDir.value = ''
+    return
+  }
+  defaultExportDir.value = (await getDefaultExportDirectory()) || ''
+}
+
+const show = async (mp_id: string, ids: string[], mp_name?: string) => {
+  visible.value = true
+  form.value.mp_id = mp_id || ''
+  form.value.scope = ids && ids.length > 0 ? 'selected' : 'all'
+  form.value.ids = ids || []
+  form.value.use_custom_dir = false
+  form.value.export_dir = ''
+
+  if (mp_name && mp_name !== '全部') {
+    form.value.zip_filename = `${mp_name}_文章.zip`
+  } else {
+    form.value.zip_filename = '全部文章.zip'
+  }
+
+  await loadDefaultExportDir()
+  if (form.value.use_custom_dir && defaultExportDir.value) {
+    form.value.export_dir = defaultExportDir.value
+  }
+}
 
 const hide = () => {
-  visible.value = false;
-};
+  visible.value = false
+}
 
-const handleOk = () => {
-  SubmitExport(form.value);
-  emit('confirm', form.value);
-  hide();
-};
-const SubmitExport = async (params: any) => {
-  try {
-    const result = await exportArticles(params);
-    console.log('导出成功:', result);
-    Message.success(result.message || '导出成功！');
-  } catch (error) {
-    console.error('导出失败:', error);
+const handlePickDirectory = async () => {
+  const selected = await pickExportDirectory(form.value.export_dir || defaultExportDir.value)
+  if (selected) {
+    form.value.export_dir = selected
+    form.value.use_custom_dir = true
   }
-};
+}
+
+const handleOpenDirectory = async () => {
+  if (!form.value.export_dir) {
+    return
+  }
+  const opened = await openExportDirectory(form.value.export_dir)
+  if (!opened) {
+    Message.warning('无法打开该目录')
+  }
+}
+
+const handleOk = async () => {
+  if (form.value.use_custom_dir) {
+    if (!form.value.export_dir) {
+      Message.warning('请先选择保存文件夹')
+      return
+    }
+  }
+  await submitExport(form.value)
+  emit('confirm', form.value)
+  hide()
+}
+
+const submitExport = async (params: typeof form.value) => {
+  try {
+    const result = await exportArticles(params)
+    const exportPath = result.export_path || result.export_dir
+    if (result.custom_dir && exportPath) {
+      Message.success(`${result.message}\n${exportPath}`)
+    } else {
+      Message.success(result.message || '导出任务已启动')
+    }
+  } catch (error) {
+    console.error('导出失败:', error)
+  }
+}
+
 const handleCancel = () => {
-  hide();
-};
+  hide()
+}
 
 defineExpose({
   show,
-  hide,
-});
+  hide
+})
 </script>

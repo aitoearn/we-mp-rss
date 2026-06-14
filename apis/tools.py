@@ -17,6 +17,9 @@ import base64
 
 # 导入导出工具
 from tools.mdtools.export import export_md_to_doc, process_articles
+from core.paths import get_export_docs_dir, get_export_mp_dir, normalize_export_mp_id, resolve_export_target_dir
+from core.export_history import append_export_record, find_export_record, load_history, remove_export_record
+import hashlib
 
 # 图片处理
 from PIL import Image
@@ -26,7 +29,7 @@ router = APIRouter(prefix="/tools", tags=["工具"])
 # Schema 模型定义
 class ExportArticlesRequest(BaseModel):
     """导出文章请求模型"""
-    mp_id: str = Field(..., description="公众号ID", example="MP_WXS_3892772220")
+    mp_id: str = Field("", description="公众号ID，空字符串表示导出全部文章", example="MP_WXS_3892772220")
     doc_id: Optional[List[str]] = Field(None, description="文档ID列表，为空则导出所有文章", example=[])
     page_size: int = Field(10, description="每页数量", ge=1, le=10)
     page_count: int = Field(1, description="页数，0表示全部", ge=0, le=10000)
@@ -39,6 +42,7 @@ class ExportArticlesRequest(BaseModel):
     export_csv: bool = Field(False, description="是否导出CSV格式")
     export_pdf: bool = Field(True, description="是否导出PDF格式")
     zip_filename: Optional[str] = Field(None, description="压缩包文件名，为空则自动生成", example="")
+    export_dir: Optional[str] = Field(None, description="自定义导出目录（绝对路径）", example="")
 
 class ExportArticlesResponse(BaseModel):
     """导出文章响应模型"""
@@ -66,26 +70,33 @@ def _export_articles_worker(
     export_json: bool,
     export_csv: bool,
     export_pdf: bool,
-    zip_filename: Optional[str]
+    zip_filename: Optional[str],
+    export_dir: Optional[str],
 ):
     """
     导出文章的工作线程函数
     """
-    return export_md_to_doc(
-        mp_id=mp_id,
-        doc_id=doc_id,
-        page_size=page_size,
-        page_count=page_count,
-        add_title=add_title,
-        remove_images=remove_images,
-        remove_links=remove_links,
-        export_md=export_md,
-        export_docx=export_docx,
-        export_json=export_json,
-        export_csv=export_csv,
-        export_pdf=export_pdf,
-        zip_filename=zip_filename
-    )
+    try:
+        return export_md_to_doc(
+            mp_id=mp_id,
+            doc_id=doc_id,
+            page_size=page_size,
+            page_count=page_count,
+            add_title=add_title,
+            remove_images=remove_images,
+            remove_links=remove_links,
+            export_md=export_md,
+            export_docx=export_docx,
+            export_json=export_json,
+            export_csv=export_csv,
+            export_pdf=export_pdf,
+            zip_filename=zip_filename,
+            export_dir=export_dir,
+        )
+    except Exception as error:
+        from core.print import print_error
+        print_error(f"导出任务失败: {error}")
+        raise
 
 @router.post("/export/articles", summary="导出文章")
 async def export_articles(
@@ -96,17 +107,20 @@ async def export_articles(
     导出文章为多种格式（使用线程池异步处理）
     """
     try:
-        # 检查是否已有相同 mp_id 的导出任务正在运行
+        # 检查是否已有相同导出任务正在运行
+        export_folder = normalize_export_mp_id(request.mp_id) or "_all"
+        export_dir = resolve_export_target_dir(request.mp_id, request.export_dir)
+        task_key = hashlib.md5(f"{export_folder}:{export_dir}".encode()).hexdigest()[:12]
         for thread in threading.enumerate():
-            if thread.name == f"export_articles_{request.mp_id}":
-                return error_response(400, "该公众号的导出任务已在处理中，请勿重复点击")
+            if thread.name == f"export_articles_{task_key}":
+                return error_response(400, "相同目录的导出任务正在处理中，请勿重复点击")
                 
-        # 直接生成 zip_filename 并返回
-        docx_path = f"./data/docs/{request.mp_id}/"
         if request.zip_filename:
-            zip_file_path = f"{docx_path}{request.zip_filename}"
+            zip_name = request.zip_filename if request.zip_filename.endswith(".zip") else f"{request.zip_filename}.zip"
+            zip_file_path = str(export_dir / zip_name)
         else:
-            zip_file_path = f"{docx_path}exported_articles_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+            zip_name = f"exported_articles_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+            zip_file_path = str(export_dir / zip_name)
         
         # 启动后台线程执行导出操作
         export_thread = threading.Thread(
@@ -124,15 +138,20 @@ async def export_articles(
                 request.export_json,
                 request.export_csv,
                 request.export_pdf,
-                request.zip_filename
+                zip_name if request.zip_filename else None,
+                request.export_dir.strip() if request.export_dir and request.export_dir.strip() else None,
             ),
-            name=f"export_articles_{request.mp_id}"
+            name=f"export_articles_{task_key}"
         )
         export_thread.start()
         
+        custom_dir = bool(request.export_dir and str(request.export_dir).strip())
         return success_response({
             "export_path": zip_file_path,
-            "message": "导出任务已启动，请稍后下载文件"
+            "export_dir": str(export_dir),
+            "mp_id": export_folder,
+            "custom_dir": custom_dir,
+            "message": "导出任务已启动，请稍后到保存目录查看文件" if custom_dir else "导出任务已启动，请稍后在「导出记录」中下载"
         })
             
     except ValueError as e:
@@ -142,53 +161,66 @@ async def export_articles(
 
 @router.get("/export/download", summary="下载导出文件")
 async def download_export_file(
-    filename: str = Query(..., description="文件名"),
+    filename: str = Query("", description="文件名"),
     mp_id: Optional[str] = Query(None, description="公众号ID"),
+    record_id: Optional[str] = Query(None, description="导出记录ID"),
     delete_after_download: bool = Query(False, description="下载后删除文件"),
-    # current_user: dict = Depends(get_current_user)
 ):
     """
     下载导出的文件
     """
     try:
-        # 定义基础目录
-        base_dir = os.path.abspath("./data/docs")
+        safe_path = None
 
-        # 构建并规范化路径
-        if mp_id:
-            target_path = os.path.join(base_dir, mp_id, filename)
-        else:
-            # 如果没有mp_id，可能是在根目录下或者是旧逻辑，视需求而定
-            # 这里为了安全起见，依然限制在 base_dir 下
-             target_path = os.path.join(base_dir, filename)
+        if record_id:
+            record = find_export_record(record_id=record_id)
+            if record and os.path.isfile(record["file_path"]):
+                safe_path = os.path.realpath(record["file_path"])
 
-        # 安全加固：使用realpath解析符号链接
-        safe_path = os.path.realpath(os.path.normpath(target_path))
-        real_base = os.path.realpath(base_dir)
+        if safe_path is None:
+            base_dir = str(get_export_docs_dir())
+            export_folder = normalize_export_mp_id(mp_id) or "_all"
+            candidates = [
+                os.path.join(base_dir, export_folder, filename),
+                os.path.join(base_dir, filename),
+            ]
+            if mp_id and str(mp_id).strip() and str(mp_id).strip() != export_folder:
+                candidates.insert(0, os.path.join(base_dir, str(mp_id).strip(), filename))
 
-        # 检查是否尝试跳出基础目录（更严格的检查）
-        if not safe_path.startswith(real_base + os.sep) and safe_path != real_base:
-            return error_response(403, "非法的文件路径请求")
+            for candidate in candidates:
+                if os.path.exists(candidate):
+                    safe_path = os.path.realpath(os.path.normpath(candidate))
+                    break
 
-        if not os.path.exists(safe_path):
-             # 避免泄露文件存在信息，或者直接报404
+            if safe_path is None:
+                record = find_export_record(mp_id=mp_id, filename=filename)
+                if record and os.path.isfile(record["file_path"]):
+                    safe_path = os.path.realpath(record["file_path"])
+
+            if safe_path is not None:
+                real_base = os.path.realpath(base_dir)
+                if not safe_path.startswith(real_base + os.sep) and safe_path != real_base:
+                    allowed = find_export_record(mp_id=mp_id, filename=filename)
+                    if not allowed or os.path.realpath(allowed["file_path"]) != safe_path:
+                        return error_response(403, "非法的文件路径请求")
+
+        if not safe_path or not os.path.isfile(safe_path):
             raise HTTPException(status_code=404, detail="文件不存在")
 
-        # 再次确认是文件而不是目录
-        if not os.path.isfile(safe_path):
-             raise HTTPException(status_code=404, detail="文件不存在")
+        download_name = filename or os.path.basename(safe_path)
 
         def cleanup_file():
             """后台任务：删除临时文件"""
             try:
                 if os.path.exists(safe_path) and delete_after_download:
                     os.remove(safe_path)
+                    remove_export_record(mp_id=mp_id, filename=download_name)
             except Exception:
                 pass
 
         return FileResponse(
             path=safe_path,
-            filename=filename,
+            filename=download_name,
             background=BackgroundTask(cleanup_file)
         )
 
@@ -207,41 +239,109 @@ async def list_export_files(
     """
     try:
         from .ver import API_VERSION
-        safe_root = os.path.abspath(os.path.normpath("./data/docs"))
-        # Ensure mp_id is not None or empty
-       
-        export_path = os.path.abspath(os.path.join(safe_root, mp_id))
-        # Validate that export_path is within safe_root
-        if not export_path.startswith(safe_root):
+        safe_root = str(get_export_docs_dir())
+        export_folder = normalize_export_mp_id(mp_id) or "_all"
+        if mp_id is not None and str(mp_id).strip():
+            export_path = os.path.join(safe_root, export_folder)
+        else:
+            export_path = safe_root
+        export_path = os.path.abspath(os.path.normpath(export_path))
+        if not export_path.startswith(os.path.abspath(safe_root)):
             return success_response([])
         if not os.path.exists(export_path):
-            return success_response([])
-        # Check directory permissions
+            os.makedirs(export_path, exist_ok=True)
+
+        # 回填历史记录：把默认目录里已有 zip 登记进去
+        for root, _, filenames in os.walk(safe_root):
+            for filename in filenames:
+                if not filename.endswith(".zip"):
+                    continue
+                file_path = os.path.join(root, filename)
+                if not os.path.isfile(file_path):
+                    continue
+                real_path = os.path.realpath(file_path)
+                if any(item.get("file_path") == real_path for item in load_history()):
+                    continue
+                folder_mp_id = os.path.relpath(root, safe_root).split(os.sep)[0]
+                if folder_mp_id == ".":
+                    folder_mp_id = "_all"
+                try:
+                    append_export_record(file_path=file_path, mp_id=folder_mp_id)
+                except Exception:
+                    continue
+
+        if not os.path.exists(export_path):
+            export_path = safe_root
         if not os.access(export_path, os.R_OK):
             return error_response(403, "无权限访问该目录")
         files = []
+        seen_paths: set[str] = set()
+
+        def add_file_entry(
+            *,
+            file_path: str,
+            folder_mp_id: str,
+            rel_path: str,
+            record_id: Optional[str] = None,
+            custom_dir: bool = False,
+        ) -> None:
+            real_path = os.path.realpath(file_path)
+            if real_path in seen_paths or not os.path.isfile(real_path):
+                return
+            file_stat = os.stat(real_path)
+            seen_paths.add(real_path)
+            query = f"record_id={record_id}" if record_id else f"mp_id={folder_mp_id}&filename={rel_path.replace(chr(92), '/')}"
+            files.append({
+                "id": record_id,
+                "filename": os.path.basename(real_path),
+                "size": file_stat.st_size,
+                "created_time": datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
+                "modified_time": datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
+                "path": rel_path.replace("\\", "/"),
+                "mp_id": folder_mp_id,
+                "custom_dir": custom_dir,
+                "file_path": real_path,
+                "download_url": f"{API_VERSION}/tools/export/download?{query}",
+            })
+
         for root, _, filenames in os.walk(export_path):
-            # Ensure root is also within safe_root, in case of symlinks or traversal
             root_norm = os.path.abspath(root)
-            if not root_norm.startswith(safe_root):
+            if not root_norm.startswith(os.path.abspath(safe_root)):
                 continue
+            folder_mp_id = os.path.relpath(root, safe_root).split(os.sep)[0]
+            if folder_mp_id == ".":
+                folder_mp_id = "_all"
             for filename in filenames:
-                if filename.endswith('.zip'):
-                    file_path = os.path.join(root, filename)
-                    try:
-                        file_stat = os.stat(file_path)
-                        file_path = os.path.relpath(file_path, export_path)
-                        files.append({
-                        "filename": filename,
-                        "size": file_stat.st_size,
-                        "created_time": datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
-                        "modified_time": datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
-                        "path": file_path,
-                        "download_url": f"{API_VERSION}/tools/export/download?mp_id={mp_id}&filename={file_path}"  # 下载链接
-                    })
-                    except PermissionError:
-                        continue
-               
+                if not filename.endswith(".zip"):
+                    continue
+                file_path = os.path.join(root, filename)
+                try:
+                    rel_path = os.path.relpath(file_path, os.path.join(safe_root, folder_mp_id))
+                    history_item = find_export_record(mp_id=folder_mp_id, filename=filename)
+                    add_file_entry(
+                        file_path=file_path,
+                        folder_mp_id=folder_mp_id,
+                        rel_path=rel_path,
+                        record_id=history_item.get("id") if history_item else None,
+                        custom_dir=False,
+                    )
+                except PermissionError:
+                    continue
+
+        for record in load_history():
+            file_path = record.get("file_path")
+            if not file_path:
+                continue
+            try:
+                add_file_entry(
+                    file_path=file_path,
+                    folder_mp_id=record.get("mp_id") or "_all",
+                    rel_path=record.get("path") or record.get("filename") or os.path.basename(file_path),
+                    record_id=record.get("id"),
+                    custom_dir=True,
+                )
+            except PermissionError:
+                continue
         
         # 按修改时间倒序排列
         files.sort(key=lambda x: x["modified_time"], reverse=True)
@@ -270,8 +370,11 @@ async def delete_export_file(
         if not request.filename :
             return error_response(400, "文件名和公众号ID不能为空")
         
-        # 构建文件路径并做路径归一化及安全检测
-        base_path = os.path.realpath(f"./data/docs/{request.mp_id}/")
+        export_folder = normalize_export_mp_id(request.mp_id) or "_all"
+        base_path = os.path.realpath(str(get_export_mp_dir(request.mp_id)))
+        record = find_export_record(mp_id=request.mp_id, filename=request.filename)
+        if record and os.path.isfile(record["file_path"]):
+            base_path = os.path.realpath(os.path.dirname(record["file_path"]))
         unsafe_path = os.path.join(base_path, request.filename)
         safe_path = os.path.realpath(os.path.normpath(unsafe_path))
         
@@ -289,12 +392,11 @@ async def delete_export_file(
         
         # 删除文件
         os.remove(safe_path)
-        
+        remove_export_record(mp_id=request.mp_id, filename=request.filename)
         return success_response({
             "filename": request.filename,
             "message": "文件删除成功"
         })
-        
     except PermissionError:
         return error_response(403, "没有权限删除该文件")
     except ValueError as e:

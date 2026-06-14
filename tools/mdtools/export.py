@@ -8,6 +8,7 @@ import zipfile
 import os
 from core.print import print_success,print_error
 from jobs.notice import sys_notice
+from core.paths import get_export_mp_dir, resolve_export_target_dir
 
 def process_single_article(art, add_title, remove_images, remove_links, export_md, 
                           export_docx, export_json, export_csv, export_pdf, 
@@ -212,11 +213,12 @@ def process_articles(session, mp_id=None,doc_id=None, page_size=10, page_count=1
     return record_count
 
 def export_md_to_doc(mp_id:str=None,doc_id:list=None,page_size:int=10,page_count:int=1,add_title=True,remove_images:bool=True,remove_links:bool=False
-                     ,export_md:bool=False,export_docx:bool=False,export_json:bool=False,export_csv:bool=False,export_pdf:bool=True,domain="",zip_filename=None,zip_file=True):
+                     ,export_md:bool=False,export_docx:bool=False,export_json:bool=False,export_csv:bool=False,export_pdf:bool=True,domain="",zip_filename=None,zip_file=True,export_dir:str=None):
     session = DB.get_session()
-    if mp_id==None:
+    if mp_id is None:
         raise ValueError("公众号ID不能为空")
-    docx_path = f"./data/docs/{mp_id}/"
+    target_dir = resolve_export_target_dir(mp_id, export_dir)
+    docx_path = str(target_dir) + os.sep
     if not os.path.exists(docx_path):
         os.makedirs(docx_path)
     csv_filename = f"{docx_path}articles.csv"
@@ -290,6 +292,13 @@ def export_md_to_doc(mp_id:str=None,doc_id:list=None,page_size:int=10,page_count
             
             print_success(f"所有文件已打包为: {zip_filename}")
             print_success(f"源文件已删除")
+
+            try:
+                from core.export_history import append_export_record
+                append_export_record(file_path=zip_filename, mp_id=mp_id)
+                print_success("导出记录已写入历史")
+            except Exception as history_error:
+                print_error(f"写入导出记录失败: {history_error}")
             
             # 发送系统通知，包含下载链接
             download_link = domain + docx_path + zip_filename.split('/')[-1]

@@ -36,8 +36,9 @@ from views import router as views_router
 import apis
 import os
 from core.config import cfg,VERSION,API_BASE
-from core.paths import get_static_dir
+from core.paths import get_static_dir, get_wx_qrcode_path
 from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi.responses import Response
 
 class AKMiddleware(BaseHTTPMiddleware):
     """Access Key 认证中间件"""
@@ -122,6 +123,17 @@ app.include_router(views_router)
 
 # 静态文件服务配置
 _static_dir = get_static_dir()
+
+
+@app.get("/static/wx_qrcode.png", include_in_schema=False)
+@app.get("/files/wx_qrcode.png", include_in_schema=False)
+async def serve_wx_qrcode():
+    """微信二维码写入用户数据目录，兼容旧版 /static 与新路径 /files。"""
+    qr_path = get_wx_qrcode_path()
+    if qr_path.is_file():
+        return FileResponse(qr_path, media_type="image/png")
+    return Response(status_code=404)
+
 app.mount("/assets", StaticFiles(directory=os.path.join(_static_dir, "assets")), name="assets")
 app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 from core.res.avatar import files_dir

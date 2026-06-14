@@ -24,7 +24,9 @@ import os
 import warnings
 from pathlib import Path
 
-_SECRET_KEY_FILE = Path(__file__).parent.parent / "data" / ".secret_key"
+from core.paths import get_data_dir
+
+_SECRET_KEY_FILE = get_data_dir() / ".secret_key"
 
 def _load_or_generate_secret_key() -> str:
     """加载或生成 SECRET_KEY，确保持久化"""

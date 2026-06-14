@@ -9,7 +9,15 @@
     </a-page-header>
 
     <a-card>
+      <a-empty v-if="!loading && (!exportRecords || exportRecords.length === 0)" description="暂无导出记录">
+        <template #extra>
+          <a-typography-text type="secondary">
+            导出完成后请稍等 1～3 分钟再点刷新。若使用「自选文件夹」导出，完成后也会出现在此列表。
+          </a-typography-text>
+        </template>
+      </a-empty>
       <a-table
+        v-else
         :loading="loading"
         :columns="columns"
         :data="exportRecords"
@@ -30,10 +38,18 @@ const handleResize = () => {
 
 onMounted(() => {
   window.addEventListener('resize', handleResize);
+  fetchExportRecords();
+  refreshTimer = window.setInterval(() => {
+    fetchExportRecords();
+  }, 10000);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize);
+  if (refreshTimer !== null) {
+    window.clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
 });
 
 const visable = ref(true);
@@ -44,6 +60,11 @@ const pagination = ref({
 });
 
 const columns = [
+  {
+    title: '公众号',
+    dataIndex: 'mp_id',
+    render: ({ record }) => record.mp_id || '_all',
+  },
   {
     title: '文件名',
     dataIndex: 'filename',
@@ -91,8 +112,9 @@ const props = defineProps({
   },
 });
 
-const exportRecords = ref();
+const exportRecords = ref<any[]>([]);
 const loading = ref(false);
+let refreshTimer: number | null = null;
 
 // 格式化文件大小为MB显示
 const formatFileSize = (size: number | string): string => {
@@ -149,7 +171,7 @@ const handleDelete = async (record: any) => {
       try {
         // 调用删除API
         const response = await DeleteExportRecords({
-          mp_id: props.mp_id,
+          mp_id: record.mp_id || props.mp_id,
           filename: record.path
         });
         console.log('删除API返回数据:', response);
@@ -186,6 +208,7 @@ const fetchExportRecords = (): Promise<void> => {
         modified_time: record.modified_time || '-',
         download_url: record.download_url || '#'
       }));
+      pagination.value.total = exportRecords.value.length;
       console.log('表格数据:', exportRecords.value); // 调试用
     })
     .catch((error) => {
@@ -198,9 +221,7 @@ const fetchExportRecords = (): Promise<void> => {
     });
 };
 
-// 初始化时加载记录
-fetchExportRecords();
-
+// 初始化时加载记录（onMounted 中也会调用）
 // 暴露方法给组件外部
 defineExpose({
   fetchExportRecords
