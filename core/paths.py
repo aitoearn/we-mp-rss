@@ -97,6 +97,25 @@ def get_export_mp_dir(mp_id: Optional[str] = None) -> Path:
     return path
 
 
+def get_configured_export_root() -> Optional[Path]:
+    """读取用户配置的导出根目录（环境变量或 config.yaml）。"""
+    configured = os.environ.get("WERSS_EXPORT_DIR") or ""
+    if not configured:
+        try:
+            from core.config import cfg
+
+            configured = cfg.get("export.default_dir", "") or ""
+        except Exception:
+            configured = ""
+    if not configured or not str(configured).strip():
+        return None
+    path = Path(str(configured).strip()).expanduser()
+    if not path.is_absolute():
+        return None
+    path.mkdir(parents=True, exist_ok=True)
+    return path.resolve()
+
+
 def resolve_export_target_dir(mp_id: Optional[str] = None, export_dir: Optional[str] = None) -> Path:
     """解析导出目标目录，优先使用用户指定的绝对路径。"""
     if export_dir and str(export_dir).strip():
@@ -107,5 +126,11 @@ def resolve_export_target_dir(mp_id: Optional[str] = None, export_dir: Optional[
         path.mkdir(parents=True, exist_ok=True)
         if not os.access(path, os.W_OK):
             raise ValueError(f"导出目录不可写: {path}")
+        return path
+    configured_root = get_configured_export_root()
+    if configured_root is not None:
+        folder = normalize_export_mp_id(mp_id) or "_all"
+        path = configured_root / folder
+        path.mkdir(parents=True, exist_ok=True)
         return path
     return get_export_mp_dir(mp_id)

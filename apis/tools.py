@@ -18,7 +18,7 @@ import base64
 # 导入导出工具
 from tools.mdtools.export import export_md_to_doc, process_articles
 from core.paths import get_export_docs_dir, get_export_mp_dir, normalize_export_mp_id, resolve_export_target_dir
-from core.export_history import append_export_record, find_export_record, load_history, remove_export_record
+from core.export_history import append_export_record, find_export_record, load_history, remove_export_record, load_last_export_result
 import hashlib
 
 # 图片处理
@@ -159,6 +159,21 @@ async def export_articles(
     except Exception as e:
         return error_response(500, f"导出失败: {str(e)}")
 
+@router.get("/export/last-result", summary="获取最近一次导出结果")
+async def get_last_export_result(
+    mp_id: Optional[str] = Query(None, description="公众号ID"),
+    current_user: dict = Depends(get_current_user_or_ak),
+):
+    """供前端轮询导出任务完成状态与 PDF 失败提示。"""
+    result = load_last_export_result()
+    if not result:
+        return success_response(None)
+    if mp_id is not None and str(mp_id).strip():
+        export_folder = normalize_export_mp_id(mp_id) or "_all"
+        if result.get("mp_id") not in (export_folder, mp_id):
+            return success_response(None)
+    return success_response(result)
+
 @router.get("/export/download", summary="下载导出文件")
 async def download_export_file(
     filename: str = Query("", description="文件名"),
@@ -284,6 +299,7 @@ async def list_export_files(
             rel_path: str,
             record_id: Optional[str] = None,
             custom_dir: bool = False,
+            summary: Optional[dict] = None,
         ) -> None:
             real_path = os.path.realpath(file_path)
             if real_path in seen_paths or not os.path.isfile(real_path):
@@ -291,7 +307,7 @@ async def list_export_files(
             file_stat = os.stat(real_path)
             seen_paths.add(real_path)
             query = f"record_id={record_id}" if record_id else f"mp_id={folder_mp_id}&filename={rel_path.replace(chr(92), '/')}"
-            files.append({
+            entry = {
                 "id": record_id,
                 "filename": os.path.basename(real_path),
                 "size": file_stat.st_size,
@@ -302,7 +318,10 @@ async def list_export_files(
                 "custom_dir": custom_dir,
                 "file_path": real_path,
                 "download_url": f"{API_VERSION}/tools/export/download?{query}",
-            })
+            }
+            if summary:
+                entry["summary"] = summary
+            files.append(entry)
 
         for root, _, filenames in os.walk(export_path):
             root_norm = os.path.abspath(root)
@@ -324,6 +343,7 @@ async def list_export_files(
                         rel_path=rel_path,
                         record_id=history_item.get("id") if history_item else None,
                         custom_dir=False,
+                        summary=history_item.get("summary") if history_item else None,
                     )
                 except PermissionError:
                     continue
@@ -339,6 +359,7 @@ async def list_export_files(
                     rel_path=record.get("path") or record.get("filename") or os.path.basename(file_path),
                     record_id=record.get("id"),
                     custom_dir=True,
+                    summary=record.get("summary"),
                 )
             except PermissionError:
                 continue

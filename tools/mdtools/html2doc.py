@@ -20,6 +20,7 @@ Date: 2025/04/15
 """
 
 import re
+from pathlib import Path
 from typing import Optional, Dict, Any
 from bs4 import BeautifulSoup
 
@@ -58,14 +59,35 @@ def html_to_markdown(html_content: str,
         'escape_underscores': False,
         'remove_images': False,
         'remove_links': False,
+        'localize_images': False,
+        'assets_dir': '',
+        'assets_rel_prefix': '_assets',
+        'server_port': None,
     }
     
     if config:
         default_config.update(config)
     
     try:
+        working_html = html_content
+        if (
+            default_config.get('localize_images')
+            and not default_config.get('remove_images')
+            and default_config.get('assets_dir')
+        ):
+            from tools.mdtools.export_images import localize_html_images
+
+            assets_dir = Path(str(default_config['assets_dir']))
+            assets_rel_prefix = str(default_config.get('assets_rel_prefix') or assets_dir.name)
+            working_html, _ = localize_html_images(
+                working_html,
+                assets_dir,
+                assets_rel_prefix=assets_rel_prefix,
+                server_port=default_config.get('server_port'),
+            )
+
         # 预处理 HTML
-        processed_html = _preprocess_html(html_content, default_config)
+        processed_html = _preprocess_html(working_html, default_config)
         
         # 转换为 Markdown
         markdown_content = md(

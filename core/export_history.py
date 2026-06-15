@@ -44,6 +44,7 @@ def append_export_record(
     file_path: str,
     mp_id: Optional[str] = None,
     filename: Optional[str] = None,
+    summary: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """登记一次成功的导出。"""
     resolved = str(Path(file_path).expanduser().resolve())
@@ -61,13 +62,39 @@ def append_export_record(
         "size": stat.st_size,
         "created_time": datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc).isoformat(),
         "modified_time": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+        "status": "success",
     }
+    if summary:
+        record["summary"] = summary
 
     records = load_history()
     records = [item for item in records if item.get("file_path") != resolved]
     records.insert(0, record)
     save_history(records[:200])
     return record
+
+
+def save_last_export_result(result: dict[str, Any]) -> None:
+    """保存最近一次导出任务结果，供前端轮询。"""
+    path = get_data_dir() / "export_last_result.json"
+    payload = {
+        **result,
+        "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load_last_export_result() -> Optional[dict[str, Any]]:
+    path = get_data_dir() / "export_last_result.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    return None
 
 
 def remove_export_record(*, mp_id: Optional[str], filename: str) -> Optional[dict[str, Any]]:

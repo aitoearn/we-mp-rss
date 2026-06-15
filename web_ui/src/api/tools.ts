@@ -31,6 +31,10 @@ export const getExportRecords = (params:any) => {
     };
   return http.get<{code: number, data: string}>('/wx/tools/export/list', {params:requestData})
 }
+
+export const getExportLastResult = (params: { mp_id?: string }) => {
+  return http.get('/wx/tools/export/last-result', { params })
+}
 export const DeleteExportRecords = (params:any) => {
     const requestData = {
       mp_id: params.mp_id||"",

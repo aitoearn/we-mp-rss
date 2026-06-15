@@ -235,6 +235,8 @@ async function startBackend() {
   backendPort = await findAvailablePort(DEFAULT_PORT);
 
   const dbUrl = `sqlite:///${dbPath.replace(/\\/g, '/')}`;
+  const prefs = readExportPrefs();
+  const exportDir = getConfiguredExportDir();
   const baseEnv = {
     ...process.env,
     PORT: String(backendPort),
@@ -245,6 +247,9 @@ async function startBackend() {
     PYTHONIOENCODING: 'utf-8',
     WERSS_DESKTOP: '1'
   };
+  if (exportDir) {
+    baseEnv.WERSS_EXPORT_DIR = exportDir;
+  }
 
   let backendExe;
   let args;
@@ -426,6 +431,17 @@ function createWindow() {
   });
 }
 
+function getConfiguredExportDir() {
+  const prefs = readExportPrefs();
+  if (prefs.defaultExportDir && fs.existsSync(prefs.defaultExportDir)) {
+    return prefs.defaultExportDir;
+  }
+  if (prefs.lastExportDir && fs.existsSync(prefs.lastExportDir)) {
+    return prefs.lastExportDir;
+  }
+  return path.join(getUserDataRoot(), 'data', 'docs', '_all');
+}
+
 function getExportPrefsPath() {
   return path.join(getUserDataRoot(), 'export_prefs.json');
 }
@@ -463,13 +479,7 @@ ipcMain.handle('dialog-select-export-dir', async (_event, currentDir) => {
   return { canceled: false, path: selected };
 });
 
-ipcMain.handle('export-get-default-dir', () => {
-  const prefs = readExportPrefs();
-  if (prefs.lastExportDir && fs.existsSync(prefs.lastExportDir)) {
-    return prefs.lastExportDir;
-  }
-  return path.join(getUserDataRoot(), 'data', 'docs', '_all');
-});
+ipcMain.handle('export-get-default-dir', () => getConfiguredExportDir());
 
 ipcMain.handle('export-open-dir', async (_event, dirPath) => {
   if (!dirPath || typeof dirPath !== 'string') {

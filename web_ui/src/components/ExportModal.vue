@@ -66,7 +66,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
-import { exportArticles } from '@/api/tools'
+import { exportArticles, getExportLastResult } from '@/api/tools'
 import { isDesktopApp } from '@/utils/auth'
 import {
   getDefaultExportDirectory,
@@ -162,7 +162,39 @@ const handleOk = async () => {
   hide()
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const pollExportResult = async (startedAt: string, mpId: string) => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    await sleep(3000)
+    try {
+      const response = await getExportLastResult({ mp_id: mpId })
+      const result = response?.data ?? response
+      if (!result || !result.updated_at || result.updated_at <= startedAt) {
+        continue
+      }
+      if (result.status === 'running') {
+        continue
+      }
+      if (result.status === 'failed') {
+        Message.error(result.message || '导出失败')
+        return
+      }
+      if (result.status === 'partial' || (result.summary?.pdf_failed_count ?? 0) > 0) {
+        Message.warning(result.message || '部分文章 PDF 导出失败')
+        return
+      }
+      Message.success(result.message || '导出完成')
+      return
+    } catch (error) {
+      console.error('查询导出结果失败:', error)
+    }
+  }
+  Message.info('导出仍在进行，请稍后在「导出记录」中查看')
+}
+
 const submitExport = async (params: typeof form.value) => {
+  const startedAt = new Date().toISOString()
   try {
     const result = await exportArticles(params)
     const exportPath = result.export_path || result.export_dir
@@ -171,6 +203,7 @@ const submitExport = async (params: typeof form.value) => {
     } else {
       Message.success(result.message || '导出任务已启动')
     }
+    void pollExportResult(startedAt, params.mp_id || '')
   } catch (error) {
     console.error('导出失败:', error)
   }

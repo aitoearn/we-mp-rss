@@ -163,6 +163,8 @@ log:
   #日志级别，默认为INFO，可选DEBUG, INFO, WARNING, ERROR, CRITICAL
    level: ${LOG_LEVEL:-INFO}
 export:
+  # 默认导出根目录（绝对路径）。桌面版也可在 export_prefs.json 里配置 defaultExportDir
+  default_dir: ${WERSS_EXPORT_DIR:-}
    pdf: 
     #是否启用PDF导出功能 默认False
     enable: ${EXPORT_PDF:-False}
