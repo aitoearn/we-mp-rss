@@ -1,6 +1,6 @@
 # WeRSS 桌面应用
 
-参考 [AutoGLM-GUI](https://github.com/suyiiyii/AutoGLM-GUI) 的 **Electron + Python FastAPI** 架构。
+本项目基于 [rachelos/we-mp-rss](https://github.com/rachelos/we-mp-rss) 二次开发，桌面壳参考 [AutoGLM-GUI](https://github.com/suyiiyii/AutoGLM-GUI) 的 **Electron + Python FastAPI** 架构。
 
 ## 架构
 
@@ -102,3 +102,38 @@ PLAYWRIGHT_BROWSERS_PATH=./resources/playwright-browsers playwright install webk
 
 - 用户名: `admin`
 - 密码: `admin@123`
+
+## 文章导出
+
+桌面版在文章列表点击「导出」：
+
+| 选项 | 说明 |
+|------|------|
+| 导出格式 | PDF、Markdown、Word、JSON、Excel 等，可多选 |
+| 默认目录 | zip 保存到 `数据目录/data/docs/{公众号ID}/` |
+| 自选文件夹 | 通过系统目录选择器指定本地路径 |
+| 移除图片 | 不勾选时 Markdown 会将图片下载到 `{文章名}_assets/` 并打入 zip |
+
+### 配置默认导出目录
+
+编辑数据目录下的 `export_prefs.json`：
+
+```json
+{
+  "defaultExportDir": "/你的/导出/目录"
+}
+```
+
+或通过 `config.yaml` 的 `export.default_dir`、环境变量 `WERSS_EXPORT_DIR` 设置。
+
+### PDF 说明
+
+PDF 依赖 Playwright 浏览器。首次采集或导出时可能需要联网下载浏览器到 `data/playwright-browsers/`。若 PDF 全部失败，界面会提示原因；建议同时勾选 JSON 便于排查。
+
+### 构建产物
+
+| 步骤 | 输出 |
+|------|------|
+| 前端 | `static/` |
+| PyInstaller | `resources/backend/werss-gui/` |
+| Electron | `electron/dist/`（如 `WeRSS-1.5.2-arm64.dmg`） |

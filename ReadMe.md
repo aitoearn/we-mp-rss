@@ -8,33 +8,47 @@
 [中文](README.zh-CN.md)|[English](ReadMe.md)
 
 Quick Start
-```
-docker run -d  --name we-mp-rss  -p 8001:8001 -v ./data:/app/data  ghcr.io/rachelos/we-mp-rss:latest
-```
-Visit http://<your-ip>:8001/ to get started
 
-# Quick Upgrade 
+WeRSS is an **Electron desktop client** with a bundled Python backend — subscribe, read, and export WeChat articles on your PC.
 
-```
-docker stop we-mp-rss
-docker rm we-mp-rss
-docker pull ghcr.io/rachelos/we-mp-rss:latest
-# If you added other parameters, please modify accordingly
-docker run -d  --name we-mp-rss  -p 8001:8001 -v ./data:/app/data  ghcr.io/rachelos/we-mp-rss:latest
-```
+1. Download the installer from [Releases](https://github.com/aitoearn/we-mp-rss/releases) (`.dmg` on macOS, `.exe` on Windows)
+2. Install and launch **WeRSS**
+3. Sign in with default credentials: `admin` / `admin@123`
+4. Complete WeChat QR authorization and add subscriptions
 
-# Official Image
-```
-docker run -d  --name we-mp-rss  -p 8001:8001 -v ./data:/app/data  rachelos/we-mp-rss:latest
-```
-# Proxy Mirror for Faster Access (Faster access in China)
-```
-docker run -d  --name we-mp-rss  -p 8001:8001 -v ./data:/app/data  docker.1ms.run/rachelos/we-mp-rss:latest  
+Build from source:
+
+```bash
+python3.13 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt pyinstaller
+python scripts/build_electron.py
+# macOS output: electron/dist/WeRSS-*-arm64.dmg
 ```
 
-# Special Thanks (In no particular order)
-cyChaos, 子健MeLift, 晨阳, 童总, 胜宇, 军亮, 余光, 一路向北, 水煮土豆丝, 人可, 须臾, 澄明, 五梭,Jarvis,三三,哈基米,苹果 
+See [Desktop App Guide](docs/desktop-app.md) for details.
 
+### Desktop Data Directory
+
+| OS | Path |
+|----|------|
+| macOS | `~/Library/Application Support/WeRSS/we-mp-rss/` |
+| Windows | `%APPDATA%/WeRSS/we-mp-rss/` |
+| Linux | `~/.config/WeRSS/we-mp-rss/` |
+
+Contains: `config.yaml`, SQLite database (`data/db.db`), export history, Playwright browser cache, etc.
+
+### Custom Default Export Directory (Desktop)
+
+Edit `export_prefs.json` in the data directory above:
+
+```json
+{
+  "defaultExportDir": "/your/export/path",
+  "lastExportDir": "/your/export/path"
+}
+```
+
+You can also set `export.default_dir` in `config.yaml` or use the `WERSS_EXPORT_DIR` environment variable.
 
  <br/>
  <img src="https://github.com/user-attachments/assets/cbe924f2-d8b0-48b0-814e-7c06ccb1911c" height="60" />
@@ -48,13 +62,18 @@ cyChaos, 子健MeLift, 晨阳, 童总, 胜宇, 军亮, 余光, 一路向北, 水
     <a href="https://x.com/intent/follow?screen_name=folo_is"><img src="https://img.shields.io/badge/Follow-blue?color=1d9bf0&logo=x&labelColor=black&style=flat-square" /></a>
     <a href="https://discord.gg/followapp" target="_blank"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2Ffollowapp%3Fwith_counts%3Dtrue&query=approximate_member_count&color=5865F2&label=Discord&labelColor=black&logo=discord&logoColor=white&style=flat-square"/></a>
     <br />
-A tool for subscribing to and managing WeChat Official Account content, providing RSS subscription functionality.
+A desktop tool for subscribing to and managing WeChat Official Account content, with RSS feeds and article export.<br/>
+<strong>Available for macOS / Windows / Linux — ready to use out of the box.</strong>
 </div>
 <p align="center">
   <a href="https://github.com/DIYgod/sponsors">
     <img src="https://raw.githubusercontent.com/DIYgod/sponsors/main/sponsors.wide.svg" />
   </a>
 </p>
+
+## About This Project
+
+This project is a fork of [rachelos/we-mp-rss](https://github.com/rachelos/we-mp-rss). It builds on the original RSS subscription and scraping capabilities and adds an Electron desktop client, configurable export directories, localized Markdown images, and more. Thanks to the original author and community contributors for their open-source work.
 
 ## Features
 
@@ -69,7 +88,9 @@ A tool for subscribing to and managing WeChat Official Account content, providin
 - Custom notification channels
 - Custom RSS title, description, and cover
 - Custom RSS pagination size
-- Export to md/docx/pdf/json formats
+- Export to md/docx/pdf/json/csv formats (desktop: custom folder picker, export result feedback)
+- Markdown export can localize images into `_assets` and bundle them in the zip
+- **Desktop client (Electron)**: bundled backend, local data, persistent login
 - API interface and WebHook support
 - HTML content filtering rules (global rules and MP-specific rules)
 - Multi-theme support (13 themes: Default Purple, Blue, Green, Orange, Rose, Teal, Pink, Indigo, Violet, Coffee, Navy, Dark Mode, Sepia)
@@ -102,13 +123,88 @@ If you find We-MP-RSS helpful, feel free to buy me a beer!<br/>
 
 ## System Architecture
 
-The project adopts a front-end and back-end separation architecture:
+The project uses **Electron + Python FastAPI + Vue 3**:
+
+```
+Desktop Client (Electron)
+  └─ Embedded Python backend (FastAPI + scheduled jobs)
+       └─ Vue 3 admin UI (static/)
+```
+
 - Backend: Python + FastAPI
 - Frontend: Vue 3 + Vite
-- Database: SQLite (default)/MySQL
+- Desktop shell: Electron (`electron/`)
+- Database: SQLite (default) / MySQL / PostgreSQL
+
 <img src="docs/架构原理.png" alt="Architecture Diagram" width="80%"/>
 
-For more project principles, please refer to the [Project Documentation](https://deepwiki.com/rachelos/we-mp-rss/3.5-notification-system).
+For more details, see [Project Documentation](https://deepwiki.com/rachelos/we-mp-rss/3.5-notification-system) and [Desktop App Guide](docs/desktop-app.md).
+
+## Installation & Development
+
+### Desktop Development
+
+```bash
+git clone https://github.com/aitoearn/we-mp-rss.git
+cd we-mp-rss
+python3.13 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+cd electron && npm install && npm run dev
+```
+
+### Desktop Packaging
+
+```bash
+source .venv/bin/activate
+pip install pyinstaller
+python scripts/build_electron.py              # full build
+python scripts/build_electron.py --skip-frontend # backend + Electron only
+```
+
+### Source Development (Optional)
+
+## Environment Requirements
+- Python>=3.13.1
+- Node>=20.18.3
+
+### Backend Service
+
+1. Clone the project
+```bash
+git clone https://github.com/aitoearn/we-mp-rss.git
+cd we-mp-rss
+```
+
+2. Install Python dependencies
+```bash
+pip install -r requirements.txt
+```
+
+3. Configure database — copy and modify the configuration file:
+```bash
+cp config.example.yaml config.yaml
+```
+
+4. Start the service
+```bash
+python main.py -job True -init True
+```
+
+### Frontend Development
+
+1. Install frontend dependencies
+```bash
+cd web_ui
+yarn install
+```
+
+2. Start frontend service
+```bash
+yarn dev
+```
+
+3. Access frontend page at `http://localhost:3000`
 
 ## HTML Content Filtering Rules
 
@@ -165,55 +261,7 @@ PUT /api/filter-rules/{rule_id}
 DELETE /api/filter-rules/{rule_id}
 ```
 
-## Installation Guide
-
-# Development
-## Environment Requirements
-- Python>=3.13.1
-- Node>=20.18.3
-### Backend Service
-
-1. Clone the project
-```bash
-git clone https://github.com/rachelos/we-mp-rss.git
-cd we-mp-rss
-```
-
-2. Install Python dependencies
-```bash
-pip install -r requirements.txt
-```
-
-3. Configure database
-Copy and modify the configuration file:
-```bash
-cp config.example.yaml config.yaml
-copy config.example.yaml config.yaml
-```
-3. Start the service
-```bash
-python main.py -job True -init True
-```
-
-## Frontend Development
-1. Install frontend dependencies
-```bash
-cd we-mp-rss/web_ui
-yarn install
-```
-
-2. Start frontend service
-```bash
-yarn dev
-```
-3. Access frontend page
-```
-http://localhost:3000
-```
-
 # Environment Variable Configuration
-
-The following are the environment variable configurations supported in `config.yaml`:
 
 | Environment Variable | Default Value | Description |
 |----------|--------|------|
@@ -259,7 +307,24 @@ The following are the environment variable configurations supported in `config.y
 | `LOG_FILE` | Empty | Log file path |
 | `LOG_LEVEL` | `INFO` | Log level |
 | `EXPORT_PDF` | `False` | Whether to enable PDF export functionality |
+| `WERSS_EXPORT_DIR` | Empty | Default export root directory (absolute path; desktop can also use export_prefs.json) |
 
+# Usage
 
+1. Launch WeRSS and sign in with `admin` / `admin@123` (change password after first login).
+2. Go to WeChat Status and complete QR authorization.
+3. Add subscriptions; wait for scheduled jobs or trigger collection manually.
+4. Read, bookmark, or batch-export articles from the article list.
 
+### Article Export
 
+Click **Export** in the article list:
+
+| Option | Description |
+|--------|-------------|
+| Formats | PDF, Markdown, Word, JSON, Excel list, etc. — multi-select supported |
+| Default directory | Zip saved under `data/docs/{account-id}/` in the data directory; download from Export History |
+| Custom folder | Desktop app can pick a local path (e.g. Obsidian vault); open in Finder after export |
+| Remove images | Skips body images; **Markdown without this option downloads images to `{title}_assets/`** |
+
+The UI shows export results; PDF failures include the reason (e.g. Playwright not ready, empty article body).

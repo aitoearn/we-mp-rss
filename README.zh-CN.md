@@ -7,37 +7,48 @@
 
 [中文](README.zh-CN.md)|[English](ReadMe.md)
 
-快速运行
-```
-docker run -d  --name we-mp-rss  -p 8001:8001 -v ./data:/app/data  ghcr.io/rachelos/we-mp-rss:latest
-```
-http://<您的ip>:8001/  即可开启
+快速开始
 
-# 快速升级 
+WeRSS 是 **Electron 桌面客户端**，内置 Python 后端，适合在个人电脑上订阅、阅读与导出公众号文章。
 
-```
-docker stop we-mp-rss
-docker rm we-mp-rss
-docker pull ghcr.io/rachelos/we-mp-rss:latest
-# 如果添加了其它参数，请自行修改
-docker run -d  --name we-mp-rss  -p 8001:8001 -v ./data:/app/data  ghcr.io/rachelos/we-mp-rss:latest
-```
+1. 从 [Releases](https://github.com/aitoearn/we-mp-rss/releases) 下载对应平台安装包（macOS 为 `.dmg`，Windows 为 `.exe` 安装程序）
+2. 安装并启动 **WeRSS**
+3. 默认账号登录：`admin` / `admin@123`
+4. 按界面提示完成微信扫码授权，添加公众号订阅
 
-# 官方镜像
-```
-docker run -d  --name we-mp-rss  -p 8001:8001 -v ./data:/app/data  rachelos/we-mp-rss:latest
-```
-# 代理镜像加速访问（国内访问速度更快）
-```
-docker run -d  --name we-mp-rss  -p 8001:8001 -v ./data:/app/data  docker.1ms.run/rachelos/we-mp-rss:latest  
+自行构建安装包：
+
+```bash
+python3.13 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt pyinstaller
+python scripts/build_electron.py
+# macOS 产物：electron/dist/WeRSS-*-arm64.dmg
 ```
 
-# 感谢伙伴(排名不分先后)
- cyChaos、 子健MeLift、 晨阳、 童总、 胜宇、 军亮、 余光、 一路向北、 水煮土豆丝、 人可、 须臾、 澄明
-、五梭
+详细说明见 [桌面应用文档](docs/desktop-app.md)。
 
+### 桌面版数据目录
 
+| 系统 | 路径 |
+|------|------|
+| macOS | `~/Library/Application Support/WeRSS/we-mp-rss/` |
+| Windows | `%APPDATA%/WeRSS/we-mp-rss/` |
+| Linux | `~/.config/WeRSS/we-mp-rss/` |
 
+目录内包含：`config.yaml`、SQLite 数据库（`data/db.db`）、导出记录、Playwright 浏览器缓存等。
+
+### 自定义默认导出目录（桌面版）
+
+编辑 `export_prefs.json`（位于上述数据目录）：
+
+```json
+{
+  "defaultExportDir": "/你的/导出/目录",
+  "lastExportDir": "/你的/导出/目录"
+}
+```
+
+也可在 `config.yaml` 中设置 `export.default_dir`，或通过环境变量 `WERSS_EXPORT_DIR` 指定。
 
  <br/>
  <img src="https://github.com/user-attachments/assets/cbe924f2-d8b0-48b0-814e-7c06ccb1911c" height="60" />
@@ -51,13 +62,18 @@ docker run -d  --name we-mp-rss  -p 8001:8001 -v ./data:/app/data  docker.1ms.ru
     <a href="https://x.com/intent/follow?screen_name=folo_is"><img src="https://img.shields.io/badge/Follow-blue?color=1d9bf0&logo=x&labelColor=black&style=flat-square" /></a>
     <a href="https://discord.gg/followapp" target="_blank"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2Ffollowapp%3Fwith_counts%3Dtrue&query=approximate_member_count&color=5865F2&label=Discord&labelColor=black&logo=discord&logoColor=white&style=flat-square"/></a>
     <br />
-一个用于订阅和管理微信公众号内容的工具，提供RSS订阅功能。
+一个用于订阅和管理微信公众号内容的桌面工具，提供 RSS 订阅与文章导出功能。<br/>
+<strong>支持 macOS / Windows / Linux，开箱即用。</strong>
 </div>
 <p align="center">
   <a href="https://github.com/DIYgod/sponsors">
     <img src="https://raw.githubusercontent.com/DIYgod/sponsors/main/sponsors.wide.svg" />
   </a>
 </p>
+
+## 关于本项目
+
+本项目基于开源项目 [rachelos/we-mp-rss](https://github.com/rachelos/we-mp-rss) 进行二次开发，在原有微信公众号 RSS 订阅与采集能力之上，新增了 Electron 桌面客户端、导出目录可配置、Markdown 图片本地化等功能。感谢原作者及社区贡献者的开源工作。
 
 ## 功能特性
 
@@ -72,8 +88,10 @@ docker run -d  --name we-mp-rss  -p 8001:8001 -v ./data:/app/data  docker.1ms.ru
 - 支持自定义通知渠道
 - 支持自定义RSS标题、描述、封面
 - 支持自定义RSS分页大小
-- 支持导出md/docx/pdf/json格式
-- 支持API接口调用/WebHook调用
+- 支持导出 md/docx/pdf/json/csv 格式（桌面版支持自选文件夹、导出结果提示）
+- Markdown 导出可本地化图片到 `_assets` 目录并打入 zip
+- **桌面客户端（Electron）**：内置后端、本地数据、登录状态持久化
+- 支持 API 接口调用/WebHook 调用
 - 支持HTML内容过滤规则（全局规则和公众号专属规则）
 - 支持多主题切换（13种主题：默认紫色、清新蓝色、自然绿色、活力橙色、玫瑰红、青碧色、樱花粉、靛青色、紫罗兰、咖啡棕、深海蓝、深色模式、护眼模式）
 - 支持响应式分页（PC端点击翻页，移动端加载更多按钮）
@@ -105,21 +123,48 @@ docker run -d  --name we-mp-rss  -p 8001:8001 -v ./data:/app/data  docker.1ms.ru
 
 ## 系统架构
 
-项目采用前后端分离架构：
+项目采用 **Electron + Python FastAPI + Vue 3** 架构：
+
+```
+桌面客户端（Electron）
+  └─ 内嵌 Python 后端（FastAPI + 定时任务）
+       └─ Vue 3 管理界面（static/）
+```
+
 - 后端：Python + FastAPI
 - 前端：Vue 3 + Vite
-- 数据库：SQLite (默认)/MySQL
+- 桌面壳：Electron（`electron/`）
+- 数据库：SQLite（默认）/ MySQL / PostgreSQL
+
 <img src="docs/架构原理.png" alt="架构原理" width="80%"/>
 
-更多项目原理，请参考[项目文档](https://deepwiki.com/rachelos/we-mp-rss/3.5-notification-system)。
+更多项目原理，请参考 [项目文档](https://deepwiki.com/rachelos/we-mp-rss/3.5-notification-system) 与 [桌面应用文档](docs/desktop-app.md)。
 
-## 安装指南
+## 安装与开发
 
-# 二次开发
-## 环境需求
-- Python>=3.13.1
-- Node>=20.18.3
-### 后端服务
+### 桌面版开发
+
+```bash
+git clone https://github.com/aitoearn/we-mp-rss.git
+cd we-mp-rss
+python3.13 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+cd electron && npm install && npm run dev
+```
+
+### 桌面版打包
+
+```bash
+source .venv/bin/activate
+pip install pyinstaller
+python scripts/build_electron.py              # 完整构建
+python scripts/build_electron.py --skip-frontend # 仅后端 + Electron
+```
+
+### 源码开发（可选）
+
+环境需求：Python >= 3.13.1，Node >= 20.18.3
 
 1. 克隆项目
 ```bash
@@ -146,7 +191,7 @@ python main.py -job True -init True
 ## 前端开发
 1. 安装前端依赖
 ```bash
-cd we-mp-rss/web_ui
+cd web_ui
 yarn install
 ```
 
@@ -210,14 +255,29 @@ http://localhost:3000
 | `LOG_LEVEL` | `INFO` | 日志级别 |
 | `EXPORT_PDF` | `False` | 是否启用PDF导出功能 |
 | `EXPORT_PDF_DIR` | `./data/pdf` | PDF导出目录 |
-| `EXPORT_MARKDOWN` | `False` | 是否启用markdown导出功能 |
-| `EXPORT_MARKDOWN_DIR` | `./data/markdown` | markdown导出目录 |
+| `EXPORT_MARKDOWN` | `False` | 是否启用 markdown 导出功能 |
+| `EXPORT_MARKDOWN_DIR` | `./data/markdown` | markdown 导出目录 |
+| `WERSS_EXPORT_DIR` | 空 | 默认导出根目录（绝对路径，桌面版也可通过 export_prefs.json 配置） |
 
 # 使用说明
 
-1. 启动服务后，访问 `http://<您的IP>:8001` 进入管理界面。
-2. 使用微信扫码授权后，即可添加和管理订阅。
-3. 定时任务会自动更新内容，并生成RSS订阅链接。
+1. 启动 WeRSS，使用 `admin` / `admin@123` 登录（首次登录后建议修改密码）。
+2. 进入「微信状态」完成扫码授权。
+3. 添加公众号订阅，等待定时任务或手动触发采集。
+4. 在文章列表中阅读、收藏，或通过「导出」批量保存。
+
+### 文章导出
+
+在文章列表点击「导出」，可配置：
+
+| 选项 | 说明 |
+|------|------|
+| 导出格式 | PDF、Markdown、Word、JSON、Excel 列表等，可多选 |
+| 默认目录 | zip 保存到数据目录下的 `data/docs/{公众号ID}/`，可在「导出记录」下载 |
+| 自选文件夹 | 桌面版可直接选本地目录（如 Obsidian 库），导出完成后可「在 Finder 中打开」 |
+| 移除图片 | 勾选后不导出正文图片；**Markdown 不勾选时会下载图片到 `{文章名}_assets/`** |
+
+导出完成后界面会提示结果；若 PDF 生成失败会给出具体原因（如 Playwright 浏览器未就绪、正文未采集等）。
 
 ## Access Key 认证
 
@@ -376,6 +436,15 @@ DELETE /api/filter-rules/{rule_id}
 - **默认帐号、密码是多少？**
   - 默认帐号：admin
   - 默认密码：admin@123
+
+- **桌面版导出文件在哪里？**
+  - 默认目录：`数据目录/data/docs/{公众号ID}/` 或你在 `export_prefs.json` 中配置的 `defaultExportDir`
+  - 自选文件夹：导出时选择的本地路径
+  - 可在应用内「导出记录」查看并下载历史 zip
+
+- **导出 zip 里为什么只有部分格式 / PDF 失败？**
+  - 仅选 PDF 时，若 Playwright 浏览器未安装或文章正文未采集，可能无法生成文件；界面会提示失败原因
+  - 建议同时勾选 JSON 便于排查，或先确认文章已补全正文
 
 - **数据库连接串示例**
   - 调整环境变量DB为您的数据库连接字符串。
