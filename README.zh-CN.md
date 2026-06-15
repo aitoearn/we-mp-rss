@@ -5,7 +5,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.13.1+-red.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-green.svg)]()
 
-[中文](README.zh-CN.md)|[English](ReadMe.md)
+[English](ReadMe.md)
 
 快速开始
 
@@ -65,11 +65,6 @@ python scripts/build_electron.py
 一个用于订阅和管理微信公众号内容的桌面工具，提供 RSS 订阅与文章导出功能。<br/>
 <strong>支持 macOS / Windows / Linux，开箱即用。</strong>
 </div>
-<p align="center">
-  <a href="https://github.com/DIYgod/sponsors">
-    <img src="https://raw.githubusercontent.com/DIYgod/sponsors/main/sponsors.wide.svg" />
-  </a>
-</p>
 
 ## 关于本项目
 
@@ -99,12 +94,6 @@ python scripts/build_electron.py
 - **环境异常统计**：自动统计微信公众号文章获取时的环境异常情况
 - **Headers和Cookies认证**：消息任务支持自定义Headers和Cookies，用于需要认证的WebHook调用
 - **配置缓存**：支持Redis、Memcached和内存缓存，提升配置读取性能
-
-
-# ❤️ 赞助
-如果觉得 We-MP-RSS 对你有帮助，欢迎给我来一杯啤酒！<br/>
-<img src="docs/赞赏码.jpg" width=180/>
-[Paypal](https://www.paypal.com/ncp/payment/PUA72WYLAV5KW)
 
 ## 界面截图
 - 登录界面  

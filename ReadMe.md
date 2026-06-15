@@ -5,7 +5,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.13.1+-red.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-green.svg)]()
 
-[中文](README.zh-CN.md)|[English](ReadMe.md)
+[中文](README.md)|[English](ReadMe.md)
 
 Quick Start
 
@@ -65,11 +65,6 @@ You can also set `export.default_dir` in `config.yaml` or use the `WERSS_EXPORT_
 A desktop tool for subscribing to and managing WeChat Official Account content, with RSS feeds and article export.<br/>
 <strong>Available for macOS / Windows / Linux — ready to use out of the box.</strong>
 </div>
-<p align="center">
-  <a href="https://github.com/DIYgod/sponsors">
-    <img src="https://raw.githubusercontent.com/DIYgod/sponsors/main/sponsors.wide.svg" />
-  </a>
-</p>
 
 ## About This Project
 
@@ -99,12 +94,6 @@ This project is a fork of [rachelos/we-mp-rss](https://github.com/rachelos/we-mp
 - **Environment Exception Statistics**: Automatic tracking and statistics of environment exceptions when accessing WeChat articles
 - **Headers and Cookies Authentication**: Support custom headers and cookies in message tasks for authenticated webhook calls
 - **Configuration Cache**: Support Redis, Memcached, and memory caching for improved configuration read performance
-
-
-# ❤️ Sponsorship
-If you find We-MP-RSS helpful, feel free to buy me a beer!<br/>
-<img src="docs/赞赏码.jpg" width=180/>
-[Paypal](https://www.paypal.com/ncp/payment/PUA72WYLAV5KW)
 
 ## Screenshots
 - Login Interface  
