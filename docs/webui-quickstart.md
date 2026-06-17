@@ -1,5 +1,7 @@
 # Web UI 环境异常统计功能快速启动
 
+> 桌面版用户一般无需单独启动后端；本文面向 **源码开发** 场景。日常使用请直接打开 WeRSS 桌面应用，见 [desktop-app.md](./desktop-app.md)。
+
 ## 前端已创建的文件
 
 1. **API 接口**: `web_ui/src/api/envException.ts`
@@ -17,18 +19,14 @@
 # 启动 Redis（如果未启动）
 redis-server
 
-# 或使用 Docker
-docker run -d -p 6379:6379 --name redis redis:7-alpine
-
-# 启动后端
-cd f:\Wx\WeRss\we-mp-rss
-python main.py
+# 启动后端（在项目根目录）
+python main.py -job True
 ```
 
 ### 2. 编译前端
 
 ```bash
-cd f:\Wx\WeRss\we-mp-rss\web_ui
+cd web_ui
 
 # 安装依赖（如果未安装）
 npm install

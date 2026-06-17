@@ -34,7 +34,7 @@ npm install
 npm run dev
 ```
 
-## 一键打包（第二阶段）
+## 一键打包
 
 ```bash
 source .venv/bin/activate
@@ -47,13 +47,13 @@ python scripts/build_electron.py
 python scripts/build_electron.py --skip-frontend
 ```
 
-构建产物：
+### 构建产物
 
 | 步骤 | 输出 |
 |------|------|
 | 前端 | `static/` |
 | PyInstaller | `resources/backend/werss-gui/` |
-| Electron | `electron/dist/` |
+| Electron | `electron/dist/`（如 `WeRSS-1.5.2-arm64.dmg`） |
 
 ### 分步构建
 
@@ -130,10 +130,7 @@ PLAYWRIGHT_BROWSERS_PATH=./resources/playwright-browsers playwright install webk
 
 PDF 依赖 Playwright 浏览器。首次采集或导出时可能需要联网下载浏览器到 `data/playwright-browsers/`。若 PDF 全部失败，界面会提示原因；建议同时勾选 JSON 便于排查。
 
-### 构建产物
+## 相关文档
 
-| 步骤 | 输出 |
-|------|------|
-| 前端 | `static/` |
-| PyInstaller | `resources/backend/werss-gui/` |
-| Electron | `electron/dist/`（如 `WeRSS-1.5.2-arm64.dmg`） |
+- [订阅与 RSS 使用说明](./dingyue.md)
+- [文档索引](./README.md)
