@@ -358,6 +358,7 @@ import { inject } from 'vue'
 import { Message, Modal } from '@arco-design/web-vue'
 import { formatDateTime, formatTimestamp } from '@/utils/date'
 import router from '@/router'
+import { useRoute } from 'vue-router'
 import { deleteMpApi } from '@/api/subscription'
 import TextIcon from '@/components/TextIcon.vue'
 import { ProxyImage } from '@/utils/constants'
@@ -883,6 +884,7 @@ const handleArticleFilterChange = () => {
 
 const wechatAuthQrcodeRef = ref()
 const showAuthQrcode = inject('showAuthQrcode') as () => void
+const route = useRoute()
 const handleAuthClick = () => {
   showAuthQrcode()
 }
@@ -1249,13 +1251,51 @@ const handleExportShow = async () => {
 }
 
 
-onMounted(() => {
+const waitForNewMpArticles = async (mpId: string) => {
+  handleMpClick(mpId)
+  fullLoading.value = true
+  try {
+    for (let i = 0; i < 15; i++) {
+      if (i > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+      }
+      await fetchArticles()
+      if (pagination.value.total > 0) {
+        Message.success('文章同步完成')
+        return
+      }
+    }
+    Message.info('同步任务仍在执行，请稍后刷新查看')
+  } finally {
+    fullLoading.value = false
+    router.replace({ path: '/', query: mpId ? { mp_id: mpId } : {} })
+  }
+}
+
+const initArticlePage = async () => {
   console.log('组件挂载，开始获取数据')
-  initIssourceUrl() // 初始化 issourceUrl 值
-  fetchMpList().then(() => {
-    console.log('公众号列表获取完成')
-    fetchArticles()
-  }).catch(err => {
+  initIssourceUrl()
+  await fetchMpList()
+  console.log('公众号列表获取完成')
+
+  const mpId = typeof route.query.mp_id === 'string' ? route.query.mp_id : ''
+  const shouldSync = route.query.sync === '1'
+
+  if (mpId && shouldSync) {
+    await waitForNewMpArticles(mpId)
+    return
+  }
+
+  if (mpId) {
+    handleMpClick(mpId)
+    return
+  }
+
+  fetchArticles()
+}
+
+onMounted(() => {
+  initArticlePage().catch((err) => {
     console.error('初始化失败:', err)
   })
 })

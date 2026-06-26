@@ -90,6 +90,18 @@ async def add_custom_header(request: Request, call_next):
     response.headers["X-Powered-By"] = "Rachel"
     response.headers["GITHUB"] = "https://github.com/rachelos/we-mp-rss"
     response.headers["Server"] = cfg.get("app_name", "WeRSS")
+
+    path = request.url.path
+    if path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path in ("/", "/index.html") or (
+        not path.startswith(("api", "assets", "static", "files", "rss", "feed", "views", "proxy"))
+        and "." not in path.rsplit("/", 1)[-1]
+    ):
+        # SPA 入口禁用缓存，避免 Electron/浏览器加载旧版前端
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+
     return response
 # 创建API路由分组
 api_router = APIRouter(prefix=f"{API_BASE}")

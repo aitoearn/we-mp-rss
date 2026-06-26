@@ -26,6 +26,25 @@ router = APIRouter(prefix=f"/mps", tags=["公众号管理"])
 #             return UPDB.add_article(art)
 
 
+def _start_mp_article_sync(feed, start_page: int = 0, max_page: int | None = None) -> None:
+    """后台拉取公众号文章列表（与手动刷新 /update 一致）"""
+    page_count = max_page if max_page is not None else int(cfg.get("max_page", "2"))
+
+    def sync():
+        from core.wx import WxGather
+        wx = WxGather().Model()
+        wx.get_Articles(
+            feed.faker_id,
+            Mps_id=feed.id,
+            Mps_title=feed.mp_name,
+            CallBack=UpdateArticle,
+            start_page=start_page,
+            MaxPage=page_count,
+        )
+
+    threading.Thread(target=sync, daemon=True).start()
+
+
 def build_featured_mp_item():
     now = datetime.now().isoformat()
     return {
@@ -366,19 +385,12 @@ async def update_mps(
                     message="请不要频繁更新操作",
                     data={"time_span":time_span}
                 )
-        result=[]    
-        def UpArt(mp):
-            from core.wx import WxGather
-            wx=WxGather().Model()
-            wx.get_Articles(mp.faker_id,Mps_id=mp.id,Mps_title=mp.mp_name,CallBack=UpdateArticle,start_page=start_page,MaxPage=end_page)
-            result=wx.articles
-        import threading
-        threading.Thread(target=UpArt,args=(mp,)).start()
+        _start_mp_article_sync(mp, start_page=start_page, max_page=end_page)
         return success_response({
-            "time_span":time_span,
-            "list":result,
-            "total":len(result),
-            "mps":mp
+            "time_span": time_span,
+            "list": [],
+            "total": 0,
+            "mps": mp
         })
     except Exception as e:
         print(f"更新公众号文章: {str(e)}",e)
@@ -491,13 +503,11 @@ async def add_mp(
         session.commit()
         
         feed = existing_feed if existing_feed else new_feed
-         #在这里实现第一次添加获取公众号文章
+        # 首次添加时立即后台同步文章（与手动刷新行为一致）
         if not existing_feed:
-            from core.queue import TaskQueue
-            from core.wx import WxGather
-            Max_page=int(cfg.get("max_page","2"))
-            TaskQueue.add_task(WxGather().Model().get_Articles, faker_id=feed.faker_id, Mps_id=feed.id, CallBack=UpdateArticle, MaxPage=Max_page, Mps_title=mp_name, task_name=mp_name)
-            
+            _start_mp_article_sync(feed)
+            print(f"已启动新公众号文章同步: {mp_name} ({feed.id})")
+
         return success_response({
             "id": feed.id,
             "mp_name": feed.mp_name,

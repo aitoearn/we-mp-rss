@@ -182,11 +182,14 @@
 import { formatDateTime,formatTimestamp } from '@/utils/date'
 import { Avatar } from '@/utils/constants'
 import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { IconCheck, IconClose, IconStop, IconPlayArrow, IconCopy, IconStar, IconStarFill } from '@arco-design/web-vue/es/icon'
 import { getArticles, getArticleDetail,getPrevArticle,getNextArticle,toggleArticleReadStatus,toggleArticleFavoriteStatus } from '@/api/article'
 import { getSubscriptions, toggleMpStatus as toggleMpStatusApi } from '@/api/subscription'
 import { Message } from '@arco-design/web-vue'
 import { ProxyImage } from '@/utils/constants'
+const route = useRoute()
+const router = useRouter()
 const articles = ref([])
 const loading = ref(false)
 const mpList = ref([])
@@ -551,9 +554,50 @@ const copyMpId = async (mpId: string) => {
   }
 }
 
-onMounted(() => {
-  fetchMpList()
+const waitForNewMpArticles = async (mpId: string) => {
+  handleMpClick(mpId)
+  fullLoading.value = true
+  try {
+    for (let i = 0; i < 15; i++) {
+      if (i > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+      }
+      await fetchArticles()
+      if (pagination.value.total > 0) {
+        Message.success('文章同步完成')
+        return
+      }
+    }
+    Message.info('同步任务仍在执行，请稍后刷新查看')
+  } finally {
+    fullLoading.value = false
+    router.replace({ path: '/', query: mpId ? { mp_id: mpId } : {} })
+  }
+}
+
+const initArticlePage = async () => {
+  await fetchMpList()
+
+  const mpId = typeof route.query.mp_id === 'string' ? route.query.mp_id : ''
+  const shouldSync = route.query.sync === '1'
+
+  if (mpId && shouldSync) {
+    await waitForNewMpArticles(mpId)
+    return
+  }
+
+  if (mpId) {
+    handleMpClick(mpId)
+    return
+  }
+
   fetchArticles()
+}
+
+onMounted(() => {
+  initArticlePage().catch((err) => {
+    console.error('初始化失败:', err)
+  })
 })
 </script>
 

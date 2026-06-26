@@ -74,22 +74,40 @@ import {
   pickExportDirectory
 } from '@/utils/exportDir'
 
-const visible = ref(false)
-const isDesktop = computed(() => isDesktopApp())
-const defaultExportDir = ref('')
-const form = ref({
+const buildExportTimestamp = () => {
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+}
+
+const buildDefaultZipFilename = (mpName?: string) => {
+  const timestamp = buildExportTimestamp()
+  if (mpName && mpName !== '全部') {
+    return `${mpName}_文章_${timestamp}.zip`
+  }
+  return `全部文章_${timestamp}.zip`
+}
+
+const DEFAULT_EXPORT_FORMAT = ['json', 'md']
+
+const createDefaultForm = (mpName?: string) => ({
   scope: 'all',
-  format: ['pdf', 'docx', 'json', 'csv', 'md'],
+  format: [...DEFAULT_EXPORT_FORMAT],
   page_count: 10,
   mp_id: '',
   ids: [] as string[],
   add_title: true,
   remove_images: false,
   remove_links: false,
-  zip_filename: '',
+  zip_filename: buildDefaultZipFilename(mpName),
   use_custom_dir: false,
   export_dir: ''
 })
+
+const visible = ref(false)
+const isDesktop = computed(() => isDesktopApp())
+const defaultExportDir = ref('')
+const form = ref(createDefaultForm())
 
 const defaultExportDirHint = computed(() => {
   if (defaultExportDir.value) {
@@ -109,18 +127,15 @@ const loadDefaultExportDir = async () => {
 }
 
 const show = async (mp_id: string, ids: string[], mp_name?: string) => {
-  visible.value = true
-  form.value.mp_id = mp_id || ''
-  form.value.scope = ids && ids.length > 0 ? 'selected' : 'all'
-  form.value.ids = ids || []
-  form.value.use_custom_dir = false
-  form.value.export_dir = ''
-
-  if (mp_name && mp_name !== '全部') {
-    form.value.zip_filename = `${mp_name}_文章.zip`
-  } else {
-    form.value.zip_filename = '全部文章.zip'
+  const defaults = createDefaultForm(mp_name)
+  form.value = {
+    ...defaults,
+    mp_id: mp_id || '',
+    scope: ids && ids.length > 0 ? 'selected' : 'all',
+    ids: ids || []
   }
+
+  visible.value = true
 
   await loadDefaultExportDir()
   if (form.value.use_custom_dir && defaultExportDir.value) {

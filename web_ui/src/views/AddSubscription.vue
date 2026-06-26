@@ -205,15 +205,21 @@ const handleSubmit = async () => {
 
   // 表单提交
   try {
-    await addSubscription({
+    const res = await addSubscription({
       mp_name: form.value.name,
       mp_id: form.value.wx_id,
       avatar: form.value.avatar,
       mp_intro: form.value.description,
     })
-    
-    Message.success('订阅添加成功')
-    router.push('/')
+
+    Message.success('订阅添加成功，正在同步文章')
+    router.push({
+      path: '/',
+      query: {
+        mp_id: res?.id || '',
+        sync: '1'
+      }
+    })
   } catch (error) {
     console.error('订阅添加失败:', error)
     Message.error(error.message || '订阅添加失败，请稍后重试')
