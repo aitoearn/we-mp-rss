@@ -1,4 +1,5 @@
 from core.models import Article
+from core.models.base import DATA_STATUS
 from core.db import DB
 from datetime import datetime, timezone
 import json
@@ -10,6 +11,8 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
+
+from sqlalchemy import and_, or_
 
 from core.print import print_success, print_error, print_warning
 from jobs.notice import sys_notice
@@ -98,6 +101,68 @@ def _pack_staging_to_zip(staging_dir: Path, zip_path: Path) -> None:
                 zipf.write(file_path, arc_name)
 
 
+def _effective_mp_id(mp_id: Optional[str]) -> Optional[str]:
+    """空字符串或 _all 表示导出全部公众号，不做 mp_id 过滤。"""
+    if mp_id is None:
+        return None
+    value = str(mp_id).strip()
+    if not value or value == "_all":
+        return None
+    return value
+
+
+def _needs_article_body(*, export_md: bool, export_docx: bool, export_pdf: bool) -> bool:
+    return export_md or export_docx or export_pdf
+
+
+def _build_export_article_query(
+    session,
+    *,
+    mp_id: Optional[str],
+    doc_id: Optional[list],
+    export_md: bool,
+    export_docx: bool,
+    export_pdf: bool,
+):
+    """构建导出文章查询，条件与文章列表保持一致（排除已删除）。"""
+    query = session.query(Article).filter(Article.status != DATA_STATUS.DELETED)
+
+    effective_mp_id = _effective_mp_id(mp_id)
+    if effective_mp_id:
+        query = query.filter(Article.mp_id.in_(effective_mp_id.split(",")))
+
+    if doc_id:
+        query = query.filter(Article.id.in_(doc_id))
+
+    if _needs_article_body(export_md=export_md, export_docx=export_docx, export_pdf=export_pdf):
+        query = query.filter(
+            or_(
+                Article.has_content == 1,
+                and_(Article.content.isnot(None), Article.content != ""),
+                and_(Article.content_html.isnot(None), Article.content_html != ""),
+            )
+        )
+    return query
+
+
+def _empty_export_hint(
+    *,
+    doc_id: Optional[list],
+    export_md: bool,
+    export_docx: bool,
+    export_pdf: bool,
+) -> str:
+    """无文章可导出时的提示文案。"""
+    parts = ["没有符合条件的文章可导出"]
+    if doc_id:
+        parts.append("请确认已在列表中勾选要导出的文章")
+    elif _needs_article_body(export_md=export_md, export_docx=export_docx, export_pdf=export_pdf):
+        parts.append("所选范围的文章可能尚未采集正文，请等待抓取完成后再试，或改选 JSON/CSV 格式导出元数据")
+    else:
+        parts.append("请确认当前公众号下已有文章，或扩大导出页数")
+    return "。".join(parts)
+
+
 def process_single_article(
     art,
     add_title,
@@ -141,7 +206,11 @@ def process_single_article(
     }
 
     try:
-        html_content = art.content if hasattr(art, "content") and art.content else ""
+        html_content = ""
+        if hasattr(art, "content") and art.content:
+            html_content = art.content
+        elif hasattr(art, "content_html") and art.content_html:
+            html_content = art.content_html
 
         md_generated = False
         if export_md and html_content:
@@ -292,11 +361,15 @@ def process_articles(
         if page_count != 0 and page_index >= page_count:
             break
 
-        query = session.query(Article).filter(Article.content != None).where(Article.status == 1)
-        if mp_id:
-            query = query.where(Article.mp_id.in_(mp_id.split(",")))
+        query = _build_export_article_query(
+            session,
+            mp_id=mp_id,
+            doc_id=doc_id,
+            export_md=export_md,
+            export_docx=export_docx,
+            export_pdf=export_pdf,
+        )
         if doc_id:
-            query = query.where(Article.id.in_(doc_id))
             is_break = True
 
         query = query.order_by(Article.publish_time.desc(), Article.id.desc())
@@ -360,7 +433,7 @@ def export_md_to_doc(
 ):
     session = DB.get_session()
     if mp_id is None:
-        raise ValueError("公众号ID不能为空")
+        mp_id = ""
 
     target_dir = resolve_export_target_dir(mp_id, export_dir)
     staging_dir = _create_export_staging_dir(target_dir)
@@ -412,6 +485,23 @@ def export_md_to_doc(
         zip_created = False
         final_zip_path = ""
         summary = stats.to_summary()
+
+        if stats.attempted == 0:
+            message = _empty_export_hint(
+                doc_id=doc_id,
+                export_md=export_md,
+                export_docx=export_docx,
+                export_pdf=export_pdf,
+            )
+            print_warning(message)
+            _persist_export_result(
+                mp_id=mp_id,
+                status="failed",
+                message=message,
+                zip_path="",
+                summary=summary,
+            )
+            return stats
 
         if stats.exported > 0:
             if not zip_filename:

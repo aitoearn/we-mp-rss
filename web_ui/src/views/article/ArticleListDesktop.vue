@@ -256,15 +256,24 @@
               <a-button type="primary" @click="handleRefresh">确定</a-button>
             </template>
           </a-modal>
-          <a-modal v-model:visible="featuredArticleModalVisible" title="添加精选文章">
-            <a-form>
-              <a-form-item label="文章链接">
-                <div class="featured-url-input-wrapper">
-                  <a-input
-                    v-model="featuredArticleUrl"
-                    placeholder="请输入微信公众号文章链接"
-                    allow-clear
-                  />
+          <a-modal
+            v-model:visible="featuredArticleModalVisible"
+            title="添加精选文章"
+            @open="handleFeaturedArticleModalOpen"
+          >
+            <a-form :model="featuredArticleForm">
+              <a-form-item label="文章链接" field="url">
+                <div class="featured-url-input-wrapper ignore">
+                  <a-input-group style="width: 100%;">
+                    <a-input
+                      ref="featuredArticleInputRef"
+                      v-model="featuredArticleForm.url"
+                      placeholder="请输入微信公众号文章链接"
+                      allow-clear
+                      @paste="handleFeaturedArticlePaste"
+                    />
+                    <a-button type="outline" @click="pasteFeaturedArticleUrl">粘贴</a-button>
+                  </a-input-group>
                   <div class="featured-url-example">eg：https://mp.weixin.qq.com/s/xxxxx</div>
                 </div>
               </a-form-item>
@@ -387,7 +396,8 @@ const filterStatus = ref('')
 const mpSearchText = ref('')
 const articleFilterType = ref('') // 单选筛选: 'favorite' | 'has_content' | 'no_content' | 'updating' | 'deleted'
 const featuredArticleModalVisible = ref(false)
-const featuredArticleUrl = ref('')
+const featuredArticleForm = ref({ url: '' })
+const featuredArticleInputRef = ref<{ focus?: () => void } | null>(null)
 
 const pagination = ref({
   current: 1,
@@ -742,12 +752,47 @@ const activeFeed = ref({
 const canManageMp = (mpId: string) => mpId !== '' && mpId !== FEATURED_MP_ID
 
 const showAddFeaturedArticleModal = () => {
-  featuredArticleUrl.value = ''
-  featuredArticleModalVisible.value = true
+  featuredArticleForm.value.url = ''
+  // 等下拉菜单关闭后再打开弹窗，避免遮罩层挡住输入框交互
+  setTimeout(() => {
+    featuredArticleModalVisible.value = true
+  }, 0)
+}
+
+const handleFeaturedArticleModalOpen = () => {
+  nextTick(() => {
+    featuredArticleInputRef.value?.focus?.()
+  })
+}
+
+const handleFeaturedArticlePaste = (event: ClipboardEvent) => {
+  const text = event.clipboardData?.getData('text') ?? ''
+  if (!text) {
+    return
+  }
+  event.preventDefault()
+  featuredArticleForm.value.url = text.trim()
+}
+
+const pasteFeaturedArticleUrl = async () => {
+  try {
+    const text = await navigator.clipboard.readText()
+    if (!text.trim()) {
+      Message.warning('剪贴板为空')
+      return
+    }
+    featuredArticleForm.value.url = text.trim()
+    nextTick(() => {
+      featuredArticleInputRef.value?.focus?.()
+    })
+  } catch (error) {
+    console.error('读取剪贴板失败:', error)
+    Message.warning('无法读取剪贴板，请使用 Cmd+V / Ctrl+V 或手动输入')
+  }
 }
 
 const handleAddFeaturedArticle = async () => {
-  const url = featuredArticleUrl.value.trim()
+  const url = featuredArticleForm.value.url.trim()
   if (!url) {
     Message.warning('请输入文章链接')
     return

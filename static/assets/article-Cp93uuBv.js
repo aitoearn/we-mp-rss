@@ -1,0 +1,1 @@
+import{v as e}from"./http-DpN9Ltb3.js";export{e as getArticles};

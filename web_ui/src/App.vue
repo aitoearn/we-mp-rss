@@ -221,7 +221,7 @@
 
 <script setup lang="ts">
 import translate from 'i18n-jsautotranslate'
-import { ref,watchEffect, computed, onMounted, watch, provide } from 'vue'
+import { ref,watchEffect, computed, onMounted, watch, provide, nextTick } from 'vue'
 import { Modal } from '@arco-design/web-vue/es/modal'
 import {getSysInfo} from '@/api/sysInfo'
 const currentLanguage = ref(localStorage.getItem('language') || 'chinese_simplified');
@@ -278,14 +278,36 @@ const fetchUserInfo = async () => {
   }
 }
 
+const WX_AUTH_AUTO_PROMPT_KEY = 'wx_auth_auto_prompted'
+
 const fetchSysInfo = async () => {
   try {
     const res = await getSysInfo()
     haswxLogined.value = res?.wx?.login||false
     wxLoginInfo.value = res?.wx?.info||null
+    return res
   } catch (error) {
     console.error('获取系统信息失败', error)
+    return null
   }
+}
+
+/** 启动后检测微信授权是否有效，失效则自动弹出扫码二维码（每会话仅提示一次） */
+const checkWxAuthAndPrompt = async () => {
+  if (route.path === '/login' || !isAuthenticated.value) {
+    return
+  }
+  await fetchSysInfo()
+  if (haswxLogined.value) {
+    return
+  }
+  if (sessionStorage.getItem(WX_AUTH_AUTO_PROMPT_KEY) === '1') {
+    return
+  }
+  sessionStorage.setItem(WX_AUTH_AUTO_PROMPT_KEY, '1')
+  Message.warning('微信授权已失效或未授权，请扫码完成授权')
+  await nextTick()
+  showAuthQrcode()
 }
 
 const showWxAccountInfo = () => {
@@ -328,7 +350,7 @@ const handleLogout = async () => {
 onMounted(() => {
   if (isAuthenticated.value) {
     fetchUserInfo()
-    fetchSysInfo()
+    checkWxAuthAndPrompt()
   }
   initBrowserNotification()
   translatePage();
@@ -341,7 +363,7 @@ watch(
     hasLogined.value = !!localStorage.getItem('token')
     if (hasLogined.value) {
       fetchUserInfo()
-      fetchSysInfo()
+      checkWxAuthAndPrompt()
     }
   }
 )

@@ -31,49 +31,41 @@ def setStatus(status:bool):
     with login_lock:
         WX_LOGIN_ED = status
 
-def getStatus():
-    """获取登录状态，优先从Redis读取，失败则使用全局变量，并检查token是否过期"""
-    global WX_LOGIN_ED
+def _is_token_expired(expiry: dict) -> bool:
+    """判断微信 token 是否已过期（优先使用 expiry_timestamp）"""
     import time
+    if not expiry:
+        return False
+    expiry_timestamp = expiry.get('expiry_timestamp')
+    if expiry_timestamp:
+        return expiry_timestamp <= time.time()
+    remaining = expiry.get('remaining_seconds')
+    if remaining is not None:
+        return remaining <= 0
+    return False
 
-    # 尝试从Redis读取
-    if redis_client.is_connected:
-        try:
-            val = redis_client._client.get(REDIS_KEY_STATUS)
-            if val is not None and val == "1":
-                # 检查token是否过期
-                token_data = getLoginInfo()
-                if token_data and 'expiry' in token_data and token_data['expiry']:
-                    expiry = token_data['expiry']
-                    # 检查剩余秒数
-                    if 'remaining_seconds' in expiry:
-                        remaining = expiry['remaining_seconds']
-                        if remaining is not None and remaining > 0:
-                            return True
-                        else:
-                            # token已过期，更新状态
-                            print_warning("Token已过期，需要重新登录")
-                            setStatus(False)
-                            return False
-                    # 检查过期时间戳
-                    elif 'expiry_timestamp' in expiry:
-                        expiry_timestamp = expiry['expiry_timestamp']
-                        # 过期时间戳 >= 当前时间，说明还没过期
-                        if expiry_timestamp and expiry_timestamp >= time.time():
-                            return True
-                        else:
-                            # token已过期，更新状态
-                            print_warning("Token已过期，需要重新登录")
-                            setStatus(False)
-                            return False
-                # 没有过期信息，但状态为True，暂时返回True
-                return True
-        except Exception as e:
-            print_warning(f"检查登录状态失败: {e}")
-            pass
-    # 回退到全局变量
-    with login_lock:
-        return WX_LOGIN_ED
+def getStatus():
+    """获取登录状态：基于持久化 token 校验是否有效（服务重启后亦可恢复）"""
+    token_data = getLoginInfo()
+    if not token_data or not token_data.get('token'):
+        setStatus(False)
+        return False
+
+    expiry = token_data.get('expiry')
+    if expiry and _is_token_expired(expiry):
+        print_warning("Token已过期，需要重新登录")
+        setStatus(False)
+        return False
+
+    setStatus(True)
+    return True
+
+def sync_login_status():
+    """服务启动时从持久化 token 同步微信登录状态"""
+    if getStatus():
+        print_success("微信授权状态有效，已恢复登录状态")
+    else:
+        print_warning("微信未授权或授权已过期，需扫码重新授权")
 def getLoginInfo():
     from driver.token import _get_token_data
     return _get_token_data()
@@ -108,36 +100,7 @@ def Success(data:dict,ext_data:dict={}):
 
 def CanGetToken():
     """检查是否可以获取Token，包括检查登录状态和token过期时间"""
-    import time
-
-    # 检查登录状态
     if not getStatus():
-        print_warning("当前未登录，请先扫码登录")
+        print_warning("当前未登录或Token已过期，请先扫码登录")
         return False
-
-    # 检查token过期时间
-    token_data = getLoginInfo()
-    if not token_data or not token_data.get('token'):
-        print_warning("Token不存在，请重新登录")
-        setStatus(False)
-        return False
-
-    # 检查过期信息
-    expiry = token_data.get('expiry')
-    if expiry:
-        # 检查剩余秒数
-        if 'remaining_seconds' in expiry:
-            remaining = expiry['remaining_seconds']
-            if remaining is not None and remaining <= 0:
-                print_warning("Token已过期，请重新扫码登录")
-                setStatus(False)
-                return False
-        # 检查过期时间戳
-        elif 'expiry_timestamp' in expiry:
-            expiry_timestamp = expiry['expiry_timestamp']
-            if expiry_timestamp and expiry_timestamp <= time.time():
-                print_warning("Token已过期，请重新扫码登录")
-                setStatus(False)
-                return False
-
     return True

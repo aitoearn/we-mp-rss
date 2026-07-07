@@ -21,9 +21,9 @@ def auth():
     thread = threading.Thread(target=run_auth)
     thread.start()
     thread.join()  # 可选：等待完成
-def start_auth_service():    
-    # from driver.wx_api import login_with_token
-    # login_with_token()
+def start_auth_service():
+    from driver.success import sync_login_status
+    sync_login_status()
     if str(os.getenv('WE_RSS.AUTH',False))=="True":
         print_warning("启动授权定时任务")
         auth_task=TaskScheduler()
